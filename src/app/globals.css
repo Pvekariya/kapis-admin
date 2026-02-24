@@ -1,26 +1,184 @@
 @import "tailwindcss";
 
+/* ---------- APP THEME ---------- */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f5f6fa;
+  --panel: #ffffff;
+  --border: #e5e7eb;
+  --text: #111827;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --bg: #0b0c10;
+  --panel: #111217;
+  --border: #1f2933;
+  --text: #e5e7eb;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---------- INPUT UI ---------- */
+
+.input {
+  width: 100%;
+  border: 1px solid #444;
+  padding: 8px;
+  border-radius: 6px;
+  background: #111;
+  color: white;
+}
+
+.btn {
+  background: #111;
+  color: white;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+.form-box label {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* ---------- INVOICE ---------- */
+
+.invoice {
+  width: 148mm;
+  height: 210mm;
+  padding: 8mm;
+  border: 2px solid black !important;
+  background: white;
+  color: black;
+  position: relative;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.title {
+  text-align: center;
+  font-weight: bold;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.box {
+  border: 1px solid black;
+  padding: 6px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+/* ---------- TABLE AREA ---------- */
+
+.table-area {
+  height: 130mm;
+  overflow: hidden;
+  border-bottom: 1px solid black; /* seals vertical lines */
+}
+
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  height: 100%;
+}
+
+.invoice-table th,
+.invoice-table td {
+  border-left: 1px solid black;
+  border-right: 1px solid black;
+  padding: 4px;
+  text-align: center;
+}
+
+.invoice-table thead {
+  border-top: 1px solid black;
+  border-bottom: 1px solid black;
+}
+
+.invoice-table tr {
+  height: 12mm;
+}
+
+/* ---------- FOOTER ---------- */
+
+.footer {
+  position: absolute;
+  bottom: 8mm;
+  left: 8mm;
+  right: 8mm;
+  border-top: 1px solid black;
+  background: white;
+  padding-top: 6px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.total {
+  border: 1px solid black;
+  padding: 6px;
+  width: 50%;
+}
+
+.sign {
+  text-align: right;
+}
+
+/* ---------- PRINT ENGINE ---------- */
+
+@media print {
+
+  @page {
+    size: A5 portrait;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .invoice,
+  .invoice * {
+    visibility: visible;
+  }
+
+  .invoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border: 2px solid black !important;
+    box-sizing: border-box;
+  }
+}
+
+/* ---------- SALES LEDGER PRINT ---------- */
+
+@media print {
+
+  body * {
+    visibility: hidden;
+  }
+
+  .ledger-print,
+  .ledger-print * {
+    visibility: visible;
+  }
+
+  .ledger-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+    color: black;
+    padding: 20px;
+  }
+
 }
