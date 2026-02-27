@@ -21,12 +21,19 @@ export default function LoginPage() {
     const email = form[0].value;
     const password = form[1].value;
 
-    const res = await fetch("/api/auth/login", {
+    if (!process.env.NEXT_PUBLIC_API_URL) { alert("API URL not configured"); setLoading(false); return; }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
+
+    if (!res.ok) {
+      alert("Server error. Check backend deployment.");
+      setLoading(false);
+      return;
+    }
 
     const data = await res.json();
 

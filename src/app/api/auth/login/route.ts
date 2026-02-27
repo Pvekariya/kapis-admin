@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     httpOnly: true,
     path: "/",
     sameSite: "lax",
-    secure: false,
+    secure: process.env.NODE_ENV === "production",
   });
 
   console.log("SESSION COOKIE SET:", user._id.toString());
