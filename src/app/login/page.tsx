@@ -21,8 +21,7 @@ export default function LoginPage() {
     const email = form[0].value;
     const password = form[1].value;
 
-    if (!process.env.NEXT_PUBLIC_API_URL) { alert("API URL not configured"); setLoading(false); return; }
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`, {
+    const res = await fetch("/api/auth/login", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
