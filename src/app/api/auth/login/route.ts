@@ -3,21 +3,27 @@ import { getDb } from "@/lib/mongodb";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    const body = await req.json();
+
+    console.log("BODY:", body);
 
     const db = await getDb();
 
-    // 🔹 Find user EXACTLY as stored
     const user = await db.collection("users").findOne({
-      email: email,
+      email: body.email,
     });
 
+    console.log("EMAIL RECEIVED:", body.email);
+    console.log("USER FOUND:", user);
+
     if (!user) {
-      return NextResponse.json({ success: false, error: "User not found" });
+      return NextResponse.json({ success: false, reason: "user not found" });
     }
 
-    if (user.password !== password) {
-      return NextResponse.json({ success: false, error: "Wrong password" });
+    if (user.password !== body.password) {
+      console.log("PASSWORD RECEIVED:", body.password);
+      console.log("PASSWORD IN DB:", user.password);
+      return NextResponse.json({ success: false, reason: "password mismatch" });
     }
 
     const response = NextResponse.json({ success: true });
@@ -26,7 +32,7 @@ export async function POST(req: Request) {
       name: "session",
       value: user._id.toString(),
       httpOnly: true,
-      secure: true,        // ALWAYS true on Vercel
+      secure: true,
       sameSite: "lax",
       path: "/",
     });
@@ -35,6 +41,6 @@ export async function POST(req: Request) {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-    return NextResponse.json({ success: false, error: "Server error" });
+    return NextResponse.json({ success: false });
   }
 }
