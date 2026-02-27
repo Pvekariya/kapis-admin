@@ -25,7 +25,7 @@ export default function LoginPage() {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: email, password }),
+      body: JSON.stringify({ email, password }),
     });
 
     if (!res.ok) {
@@ -70,12 +70,12 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <label className="text-sm opacity-70">Username</label>
-            <input required className="w-full bg-black/30 border border-white/10 rounded-full px-4 py-2 outline-none focus:border-blue-500 transition" />
+            <input name="email" required className="w-full bg-black/30 border border-white/10 rounded-full px-4 py-2 outline-none focus:border-blue-500 transition" />
           </div>
 
           <div className="space-y-2">
             <label className="text-sm opacity-70">Password</label>
-            <input type="password" required className="w-full bg-black/30 border border-white/10 rounded-full px-4 py-2 outline-none focus:border-blue-500 transition" />
+            <input name="password" type="password" required className="w-full bg-black/30 border border-white/10 rounded-full px-4 py-2 outline-none focus:border-blue-500 transition" />
           </div>
 
           <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-full font-semibold transition shadow-[0_0_25px_rgba(0,120,255,0.4)] hover:shadow-[0_0_45px_rgba(0,120,255,0.7)]">
