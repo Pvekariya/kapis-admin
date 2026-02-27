@@ -3,48 +3,38 @@ import { getDb } from "@/lib/mongodb";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-
-    const email = body.email?.trim().toLowerCase();
-    const password = body.password?.trim();
-
-    if (!email || !password) {
-      return NextResponse.json({ success: false, message: "Missing credentials" });
-    }
+    const { email, password } = await req.json();
 
     const db = await getDb();
 
-    // Find user by email only
-    const user = await db.collection("users").findOne({ email });
+    // 🔹 Find user EXACTLY as stored
+    const user = await db.collection("users").findOne({
+      email: email,
+    });
 
     if (!user) {
-      console.log("User not found:", email);
-      return NextResponse.json({ success: false, message: "User not found" });
+      return NextResponse.json({ success: false, error: "User not found" });
     }
 
-    // Compare password (plain text version - since your DB stores plain text)
     if (user.password !== password) {
-      console.log("Password mismatch for:", email);
-      return NextResponse.json({ success: false, message: "Wrong password" });
+      return NextResponse.json({ success: false, error: "Wrong password" });
     }
 
-    const res = NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true });
 
-    res.cookies.set({
+    response.cookies.set({
       name: "session",
       value: user._id.toString(),
       httpOnly: true,
-      path: "/",
+      secure: true,        // ALWAYS true on Vercel
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      path: "/",
     });
 
-    console.log("SESSION COOKIE SET:", user._id.toString());
+    return response;
 
-    return res;
-
-  } catch (error) {
-    console.error("LOGIN ERROR:", error);
-    return NextResponse.json({ success: false, message: "Server error" });
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    return NextResponse.json({ success: false, error: "Server error" });
   }
 }
