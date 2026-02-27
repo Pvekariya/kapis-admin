@@ -5,24 +5,31 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    console.log("BODY:", body);
+    // Normalize input
+    const email = body.email?.trim().toLowerCase();
+    const password = body.password?.trim();
+
+    console.log("NORMALIZED EMAIL:", email);
+
+    if (!email || !password) {
+      return NextResponse.json({ success: false, reason: "missing credentials" });
+    }
 
     const db = await getDb();
 
+    // Case-insensitive + trimmed match
     const user = await db.collection("users").findOne({
-      email: body.email,
+      email: { $regex: `^${email}$`, $options: "i" }
     });
 
-    console.log("EMAIL RECEIVED:", body.email);
     console.log("USER FOUND:", user);
 
     if (!user) {
       return NextResponse.json({ success: false, reason: "user not found" });
     }
 
-    if (user.password !== body.password) {
-      console.log("PASSWORD RECEIVED:", body.password);
-      console.log("PASSWORD IN DB:", user.password);
+    if (user.password?.trim() !== password) {
+      console.log("PASSWORD MISMATCH");
       return NextResponse.json({ success: false, reason: "password mismatch" });
     }
 
