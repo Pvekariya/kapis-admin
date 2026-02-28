@@ -109,6 +109,19 @@ export async function POST(req: Request) {
     date: new Date(),
   });
 
+  // 🔥 AUTO DAYBOOK ENTRY (only if no pending items)
+  if (!hasPending) {
+    await db.collection("daybook").insertOne({
+      type: "income",
+      category: "sale",
+      description: `Invoice #${body.invoice} - ${body.customer || "Walk-in"}`,
+      amount: Number(body.total || 0),
+      paymentMode: "cash", // adjust later if payment mode added
+      date: new Date(),
+      createdAt: new Date(),
+    });
+  }
+
   return NextResponse.json({
     success: true,
     pending: hasPending,

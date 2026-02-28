@@ -50,18 +50,18 @@ export default function SalesPage() {
         Sales Ledger
       </h2>
 
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="grid md:grid-cols-6 gap-3 bg-[var(--panel)] p-4 rounded-xl border border-[var(--border)] mb-4">
         <input
-          placeholder="Search customer..."
+          placeholder="Search Invoice / Customer"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="input w-48"
+          className="input"
         />
 
         <select
           value={month}
           onChange={e => setMonth(e.target.value)}
-          className="input w-32"
+          className="input"
         >
           <option value="">Month</option>
           {Array.from({ length: 12 }).map((_, i) => (
@@ -75,7 +75,7 @@ export default function SalesPage() {
           placeholder="Year"
           value={year}
           onChange={e => setYear(e.target.value)}
-          className="input w-28"
+          className="input"
         />
 
         <input
@@ -100,9 +100,9 @@ export default function SalesPage() {
             }
             window.print();
           }}
-          className="btn"
+          className="btn border"
         >
-          Export Ledger
+          Export
         </button>
       </div>
 

@@ -95,16 +95,32 @@ export async function PATCH(req: Request) {
     }
   }
 
-  // DONE = remove order
+  // DONE = create income entry + remove order
   if (body.status === "done") {
+
+    // 🔥 create daybook income entry
+    await db.collection("daybook").insertOne({
+      type: "income",
+      category: "sale",
+      referenceId: order._id,
+      description: `Sale - ${order.name}`,
+      amount: Number(order.qty) * Number(product.price || 0),
+      paymentMode: "cash", // adjust later if you add payment mode in orders
+      date: new Date(),
+      createdAt: new Date(),
+    });
+
     await db.collection("orders").deleteOne({
       _id: order._id,
     });
+
   } else {
+
     await db.collection("orders").updateOne(
       { _id: order._id },
       { $set: { status: body.status } }
     );
+
   }
 
   return NextResponse.json({ success: true });

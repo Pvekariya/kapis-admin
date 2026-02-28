@@ -2,8 +2,7 @@
 
 import React, { JSX, useEffect, useRef, useState } from "react";
 import { useEffect as useEffectAuth } from "react";
-import { useEffect as useEffectNotif } from "react";
-import { Bell, Moon, Sun, LogOut } from "lucide-react";
+import { Moon, Sun, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function Header(): JSX.Element | null {
@@ -16,15 +15,15 @@ export default function Header(): JSX.Element | null {
     const [user, setUser] = useState<any>({ email: "", avatar: "", name: "" });
     const [showProfileModal, setShowProfileModal] = useState(false);
 
-    const [notifications, setNotifications] = useState<any[]>([]);
-    const [notifOpen, setNotifOpen] = useState(false);
-
     useEffect(() => {
-        setMounted(true);
         const saved = typeof window !== "undefined" && localStorage.getItem("theme");
         if (saved === "dark" || saved === "light") {
             setTheme(saved);
+            document.documentElement.classList.add(saved);
+        } else {
+            document.documentElement.classList.add("dark");
         }
+        setMounted(true);
     }, []);
 
     useEffect(() => {
@@ -40,19 +39,6 @@ export default function Header(): JSX.Element | null {
             .then(res => res.json())
             .then(data => setUser(data || { email: "", avatar: "", name: "" }))
             .catch(() => setUser({ email: "", avatar: "", name: "" }));
-    }, []);
-
-    useEffectNotif(() => {
-        const load = () => {
-            fetch("/api/notifications")
-                .then(res => res.json())
-                .then(data => setNotifications(Array.isArray(data) ? data : []))
-                .catch(() => setNotifications([]));
-        };
-
-        load();
-        const i = setInterval(load, 5000);
-        return () => clearInterval(i);
     }, []);
 
     useEffect(() => {
@@ -83,65 +69,17 @@ export default function Header(): JSX.Element | null {
         router.push("/login");
     }
 
-    async function clearNotifications() {
-        await fetch("/api/notifications", { method: "DELETE" });
-        setNotifications([]);
-    }
-
     if (!mounted) return null;
 
     return (
-        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1f2430] bg-[#0f1117] relative z-40">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--panel)] relative z-40">
             <div className="w-80" />
 
             <div className="flex items-center gap-4">
-                <div className="relative">
-                    <button
-                        onClick={() => setNotifOpen(o => !o)}
-                        className="p-2 rounded-lg hover:bg-[#1a1f2b] transition relative"
-                        aria-label="Notifications"
-                    >
-                        <Bell size={18} />
-                        {notifications.length > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-red-600 text-[10px] px-1 rounded">
-                                {notifications.length}
-                            </span>
-                        )}
-                    </button>
-
-                    {notifOpen && (
-                        <div className="absolute right-0 mt-2 w-80 bg-[#0b0d12] border border-[#1f2430] rounded-md shadow-lg z-50">
-                            <div className="flex justify-between items-center p-3 border-b border-[#15171a]">
-                                <span className="text-sm font-medium">Notifications</span>
-                                <button
-                                    onClick={clearNotifications}
-                                    className="text-xs text-red-400 hover:underline"
-                                >
-                                    Clear all
-                                </button>
-                            </div>
-
-                            <div className="max-h-80 overflow-auto text-sm">
-                                {notifications.length === 0 && (
-                                    <div className="p-3 text-[#9aa4b2]">No notifications</div>
-                                )}
-
-                                {notifications.map((n, i) => (
-                                    <div key={i} className="p-3 border-b border-[#15171a]">
-                                        <div>{n.message}</div>
-                                        <div className="text-xs text-[#9aa4b2]">
-                                            {new Date(n.createdAt).toLocaleString()}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
 
                 <button
                     onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-                    className="p-2 rounded-lg hover:bg-[#1a1f2b] transition"
+                    className="p-2 rounded-lg hover:bg-[var(--hover)] transition-all duration-200"
                     aria-label="Toggle theme"
                 >
                     {theme === "dark" ? <Moon size={18} /> : <Sun size={18} />}
@@ -164,9 +102,9 @@ export default function Header(): JSX.Element | null {
                     {profileOpen && (
                         <div
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute right-0 mt-2 w-56 bg-[#0b0d12] border border-[#1f2430] rounded-md shadow-lg z-50"
+                            className="absolute right-0 mt-2 w-56 bg-[var(--panel)] border border-[var(--border)] rounded-md shadow-lg z-50"
                         >
-                            <div className="p-4 border-b border-[#15171a]">
+                            <div className="p-4 border-b border-[var(--border)]">
                                 <div className="flex items-center gap-3">
                                     <img src={user?.avatar || "/avatar.png"} alt="Avatar" className="w-10 h-10 rounded-full object-cover" />
                                     <div>
@@ -182,14 +120,14 @@ export default function Header(): JSX.Element | null {
                                         setProfileOpen(false);
                                         setShowProfileModal(true);
                                     }}
-                                    className="w-full text-left px-3 py-2 rounded hover:bg-[#121418] transition text-sm"
+                                    className="w-full text-left px-3 py-2 rounded hover:bg-[var(--hover)] transition text-sm"
                                 >
                                     Edit profile
                                 </button>
 
                                 <button
                                     onClick={handleLogout}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-[#121418] transition text-sm text-red-400"
+                                    className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-[var(--hover)] transition text-sm text-red-400"
                                 >
                                     <LogOut size={16} />
                                     Logout
@@ -202,20 +140,20 @@ export default function Header(): JSX.Element | null {
 
             {showProfileModal && user && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[999]">
-                    <div className="bg-[#0b0d12] border border-[#1f2430] p-6 rounded-xl w-96 space-y-4">
+                    <div className="bg-[var(--panel)] border border-[var(--border)] p-6 rounded-xl w-96 space-y-4">
                         <h3 className="text-lg font-semibold">Profile</h3>
 
                         <input
                             placeholder="Name"
                             value={user.name || ""}
                             onChange={e => setUser({ ...user, name: e.target.value })}
-                            className="w-full bg-[#11151c] border border-[#1f2430] p-2 rounded"
+                            className="w-full bg-[var(--panel)] border border-[var(--border)] p-2 rounded"
                         />
 
                         <input
                             value={user.email}
                             onChange={e => setUser({ ...user, email: e.target.value })}
-                            className="w-full bg-[#11151c] border border-[#1f2430] p-2 rounded"
+                            className="w-full bg-[var(--panel)] border border-[var(--border)] p-2 rounded"
                         />
 
                         <input
@@ -231,7 +169,7 @@ export default function Header(): JSX.Element | null {
                                 };
                                 reader.readAsDataURL(file);
                             }}
-                            className="w-full bg-[#11151c] border border-[#1f2430] p-2 rounded"
+                            className="w-full bg-[var(--panel)] border border-[var(--border)] p-2 rounded"
                         />
 
                         <button

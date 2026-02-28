@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import * as XLSX from "xlsx";
 
 export default function InventoryPage() {
+  const pathname = usePathname();
+  const inventoryType = pathname.includes("/raw") ? "raw" : "finished";
+
   const [items, setItems] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<any | null>(null);
@@ -16,15 +20,13 @@ export default function InventoryPage() {
     price: "",
     hsn: "",
     color: "",
-    type: "",
+    type: inventoryType,
     packing: "",
   });
 
   const load = async () => {
     const res = await fetch("/api/inventory", { cache: "no-store" });
     const data = await res.json();
-
-    // force new reference to avoid React stale state
     setItems([...data]);
   };
 
@@ -32,12 +34,17 @@ export default function InventoryPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    setForm(prev => ({ ...prev, type: inventoryType }));
+  }, [inventoryType]);
+
   const addItem = async () => {
     await fetch("/api/inventory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
+        type: inventoryType,
         stock: Number(form.stock),
         price: Number(form.price),
       }),
@@ -49,14 +56,13 @@ export default function InventoryPage() {
       price: "",
       hsn: "",
       color: "",
-      type: "",
+      type: inventoryType,
       packing: "",
     });
 
     load();
   };
 
-  // ✅ FIXED UPDATE
   const update = async (id: string, data: any) => {
     const { _id, ...clean } = data;
 
@@ -80,34 +86,57 @@ export default function InventoryPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-
     load();
   };
 
   const exportExcel = () => {
-    const data = items.filter(i =>
-      selected.includes(i._id)
-    );
+    const data = items
+      .filter(i => i.type === inventoryType)
+      .filter(i => selected.includes(i._id));
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventory");
-    XLSX.writeFile(wb, "inventory.xlsx");
+    XLSX.writeFile(wb, `${inventoryType}-inventory.xlsx`);
   };
+
+  const filteredItems = items.filter(i => i.type === inventoryType);
+
+  const totalValue = filteredItems.reduce(
+    (sum, i) => sum + Number(i.stock) * Number(i.price),
+    0
+  );
+
+  const lowStockCount = filteredItems.filter(
+    i => Number(i.stock) < 5
+  ).length;
 
   return (
     <div className="space-y-6">
 
-      <h2 className="text-2xl font-semibold">Inventory</h2>
+      <h2 className="text-2xl font-semibold">
+        {inventoryType === "raw" ? "Raw Materials" : "Finished Products"}
+      </h2>
 
-      {/* ADD FORM */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
+          <p className="text-sm opacity-70">Total Inventory Value</p>
+          <p className="text-xl font-semibold mt-1">₹{totalValue}</p>
+        </div>
+
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
+          <p className="text-sm opacity-70">Low Stock Items</p>
+          <p className="text-xl font-semibold mt-1">{lowStockCount}</p>
+        </div>
+      </div>
+
       <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4 grid grid-cols-4 gap-3">
 
-        {Object.entries(form).map(([k, v]) => (
+        {["name","stock","price","hsn","color","packing"].map(k => (
           <input
             key={k}
             placeholder={k}
-            value={v}
+            value={(form as any)[k]}
             onChange={e =>
               setForm({ ...form, [k]: e.target.value })
             }
@@ -125,7 +154,6 @@ export default function InventoryPage() {
         Export Selected
       </button>
 
-      {/* TABLE */}
       <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
 
         <table className="w-full text-sm">
@@ -137,7 +165,6 @@ export default function InventoryPage() {
               <th className="p-3 text-center">Stock</th>
               <th className="p-3 text-center">HSN</th>
               <th className="p-3 text-center">Color</th>
-              <th className="p-3 text-center">Type</th>
               <th className="p-3 text-center">Packing</th>
               <th className="p-3 text-center">Price</th>
               <th className="p-3 text-center">Actions</th>
@@ -145,11 +172,11 @@ export default function InventoryPage() {
           </thead>
 
           <tbody>
-            {items.map(i => (
+            {filteredItems.map(i => (
               <tr
                 key={i._id}
                 className={`border-b border-[var(--border)] ${
-                  i.stock < 5 ? "bg-red-500/10" : ""
+                  Number(i.stock) < 5 ? "bg-red-500/10" : ""
                 }`}
               >
                 <td className="p-3">
@@ -170,7 +197,6 @@ export default function InventoryPage() {
                 <td className="p-3 text-center font-semibold">{i.stock}</td>
                 <td className="p-3 text-center">{i.hsn}</td>
                 <td className="p-3 text-center">{i.color}</td>
-                <td className="p-3 text-center">{i.type}</td>
                 <td className="p-3 text-center">{i.packing}</td>
                 <td className="p-3 text-center">₹{i.price}</td>
 
@@ -204,15 +230,11 @@ export default function InventoryPage() {
         </table>
       </div>
 
-      {/* EDIT MODAL */}
       {editing && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
-
           <div className="bg-[var(--panel)] p-6 rounded-xl w-[400px] space-y-3">
-
             <h3 className="font-semibold">Edit Product</h3>
-
-            {["name","stock","price","hsn","color","type","packing"].map(k => (
+            {["name","stock","price","hsn","color","packing"].map(k => (
               <input
                 key={k}
                 value={editing[k]}
@@ -222,7 +244,6 @@ export default function InventoryPage() {
                 className="input w-full"
               />
             ))}
-
             <button
               onClick={async () => {
                 await update(editing._id, editing);
@@ -232,26 +253,20 @@ export default function InventoryPage() {
             >
               Save
             </button>
-
           </div>
         </div>
       )}
 
-      {/* PURCHASE MODAL */}
       {purchasing && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
-
           <div className="bg-[var(--panel)] p-6 rounded-xl w-[300px] space-y-3">
-
             <h3 className="font-semibold">Purchase Stock</h3>
-
             <input
               type="number"
               value={purchaseQty}
               onChange={e => setPurchaseQty(+e.target.value)}
               className="input w-full"
             />
-
             <button
               onClick={async () => {
                 await update(purchasing._id, {
@@ -264,7 +279,6 @@ export default function InventoryPage() {
             >
               Add Stock
             </button>
-
           </div>
         </div>
       )}

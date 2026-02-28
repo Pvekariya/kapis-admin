@@ -2,48 +2,81 @@
 
 /* ---------- APP THEME ---------- */
 
-:root {
-  --bg: #f5f6fa;
+:root.light {
+  --bg: #fcf5c7;
   --panel: #ffffff;
   --border: #e5e7eb;
   --text: #111827;
+  --hover: #f3f4f6;
+  --muted: #6b7280;
+
+  /* Pastel Accent System */
+  --accent-primary: #79addc;   /* blue */
+  --accent-peach: #ffc09f;     /* staff */
+  --accent-yellow: #ffee93;    /* daybook */
+  --accent-cream: #fcf5c7;     /* background */
+  --accent-mint: #adf7b6;      /* inventory */
 }
 
-.dark {
+:root.dark {
   --bg: #0b0c10;
   --panel: #111217;
   --border: #1f2933;
   --text: #e5e7eb;
+  --hover: #1a1d24;
+  --muted: #9ca3af;
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 /* ---------- INPUT UI ---------- */
 
 .input {
   width: 100%;
-  border: 1px solid #444;
+  border: 1px solid var(--border);
   padding: 8px;
   border-radius: 6px;
-  background: #111;
-  color: white;
+  background: var(--panel);
+  color: var(--text);
+  transition: all 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
 }
 
 .btn {
-  background: #111;
-  color: white;
+  background: var(--panel);
+  color: var(--text);
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  background: var(--hover);
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
 }
 
 .form-box label {
   font-size: 12px;
-  opacity: 0.7;
+  color: var(--muted);
 }
 
 /* ---------- INVOICE ---------- */

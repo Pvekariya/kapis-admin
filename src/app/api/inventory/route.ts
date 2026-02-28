@@ -6,7 +6,15 @@ import { ObjectId } from "mongodb";
 export async function GET() {
   const db = await getDb();
   const items = await db.collection("inventory").find().toArray();
-  return NextResponse.json(items);
+
+  // 🔥 Normalize field names for frontend
+  const normalized = items.map((item: any) => ({
+    ...item,
+    quantity: item.stock ?? item.quantity ?? 0,
+    costPrice: item.costPrice ?? item.price ?? 0,
+  }));
+
+  return NextResponse.json(normalized);
 }
 
 // POST — add or merge product
@@ -24,13 +32,14 @@ export async function POST(req: Request) {
   if (existing) {
     await db.collection("inventory").updateOne(
       { _id: existing._id },
-      { $inc: { stock: Number(body.stock) } }
+      { $inc: { stock: Number(body.quantity || body.stock || 0) } }
     );
   } else {
     await db.collection("inventory").insertOne({
       ...body,
-      stock: Number(body.stock),
-      price: Number(body.price),
+      stock: Number(body.quantity || body.stock || 0),
+      price: Number(body.price || 0),
+      costPrice: Number(body.costPrice || body.price || 0),
       createdAt: new Date(),
     });
   }
