@@ -40,6 +40,8 @@ export default function DaybookPage() {
   });
   const [quickRange, setQuickRange] = useState<"today" | "month" | "fy" | "all">("all");
   const [selectedFY, setSelectedFY] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<any>({});
 
   const formatCurrency = (value: number) => {
     return Math.round(value || 0).toLocaleString("en-IN");
@@ -137,23 +139,58 @@ export default function DaybookPage() {
   }, [filters]);
 
   const addEntry = async () => {
-    await fetch("/api/daybook", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        amount: Number(form.amount),
-      }),
-    });
-    setForm({
-      type: "expense",
-      category: "misc",
-      description: "",
-      amount: "",
-      paymentMode: "cash",
-      date: "",
-    });
-    load();
+    if (isSaving) return;
+
+    const newErrors: any = {};
+
+    if (!form.type) newErrors.type = true;
+    if (!form.category) newErrors.category = true;
+    if (!form.date) newErrors.date = true;
+    if (!form.description || form.description.trim().length < 2) newErrors.description = true;
+    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0)
+      newErrors.amount = true;
+    if (!form.paymentMode) newErrors.paymentMode = true;
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) return;
+
+    setIsSaving(true);
+
+    try {
+      await fetch("/api/daybook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          amount: Number(form.amount),
+        }),
+      });
+
+      setForm({
+        type: "expense",
+        category: "misc",
+        description: "",
+        amount: "",
+        paymentMode: "cash",
+        date: "",
+      });
+
+      setErrors({});
+      await load();
+    } catch (error) {
+      console.error("Error saving entry:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e: any, nextId: string) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const next = document.getElementById(nextId);
+      if (next) next.focus();
+    }
   };
 
   return (
@@ -320,7 +357,7 @@ export default function DaybookPage() {
         <select
           value={form.type}
           onChange={e => setForm({ ...form, type: e.target.value })}
-          className="input"
+          className={`input ${errors.type ? "border-red-500" : ""}`}
         >
           <option value="income">Income</option>
           <option value="expense">Expense</option>
@@ -328,7 +365,7 @@ export default function DaybookPage() {
         <select
           value={form.category}
           onChange={e => setForm({ ...form, category: e.target.value })}
-          className="input"
+          className={`input ${errors.category ? "border-red-500" : ""}`}
         >
           <option value="sale">Sale</option>
           <option value="purchase">Purchase</option>
@@ -338,37 +375,50 @@ export default function DaybookPage() {
         </select>
         <input
           type="date"
+          id="date"
           value={form.date}
           onChange={e => setForm({ ...form, date: e.target.value })}
-          className="input"
+          onKeyDown={(e) => handleKeyDown(e, "description")}
+          className={`input ${errors.date ? "border-red-500" : ""}`}
         />
         <input
+          id="description"
           placeholder="Description"
           value={form.description}
           onChange={e => setForm({ ...form, description: e.target.value })}
-          className="input col-span-2"
+          onKeyDown={(e) => handleKeyDown(e, "amount")}
+          className={`input col-span-2 ${errors.description ? "border-red-500" : ""}`}
         />
         <input
+          id="amount"
           placeholder="Amount"
           type="number"
+          min="1"
+          step="1"
           value={form.amount}
           onChange={e => setForm({ ...form, amount: e.target.value })}
-          className="input"
+          onKeyDown={(e) => handleKeyDown(e, "paymentMode")}
+          className={`input ${errors.amount ? "border-red-500" : ""}`}
         />
         <select
+          id="paymentMode"
           value={form.paymentMode}
           onChange={e => setForm({ ...form, paymentMode: e.target.value })}
-          className="input"
+          onKeyDown={(e) => handleKeyDown(e, "addButton")}
+          className={`input ${errors.paymentMode ? "border-red-500" : ""}`}
         >
           <option value="cash">Cash</option>
           <option value="upi">UPI</option>
           <option value="bank">Bank</option>
         </select>
         <button
+          type="button"
+          id="addButton"
           onClick={addEntry}
-          className="btn bg-blue-600"
+          disabled={isSaving}
+          className={`btn bg-blue-600 ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          Add Entry
+          {isSaving ? "Saving..." : "Add Entry"}
         </button>
       </div>
 
@@ -393,10 +443,10 @@ export default function DaybookPage() {
                 </td>
                 <td className="p-3">{e.type}</td>
                 <td className="p-3">{e.category}</td>
-                <td className="p-3">{e.description}</td>
+                <td className="p-3">{e.description || "-"}</td>
                 <td className="p-3">{e.paymentMode}</td>
                 <td className="p-3 font-semibold">
-                  ₹{formatCurrency(e.amount)}
+                  ₹{formatCurrency(Number(e.amount) || 0)}
                 </td>
               </tr>
             ))}

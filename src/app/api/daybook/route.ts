@@ -85,20 +85,31 @@ export async function POST(req: Request) {
   const db = await getDb();
   const body = await req.json();
 
+  if (!body.amount || Number(body.amount) <= 0) {
+    return NextResponse.json(
+      { success: false, message: "Invalid amount" },
+      { status: 400 }
+    );
+  }
+
   const entry = {
-    type: body.type, // income | expense
-    category: body.category, // sale | purchase | salary | advance | misc
+    type: body.type,
+    category: body.category,
     referenceId: body.referenceId || null,
-    description: body.description,
+    description: body.description ? String(body.description).trim() : "",
     amount: Number(body.amount),
-    paymentMode: body.paymentMode, // cash | upi | bank
+    paymentMode: body.paymentMode,
     date: body.date ? new Date(body.date) : new Date(),
     createdAt: new Date(),
   };
 
-  await db.collection("daybook").insertOne(entry);
+  const result = await db.collection("daybook").insertOne(entry);
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    success: true,
+    insertedId: result.insertedId,
+    entry,
+  });
 }
 
 /* =========================
