@@ -204,18 +204,49 @@ export default function SalesPage() {
 
       {editing && form && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-white text-black p-6 rounded-xl w-[520px] space-y-4">
+          <div className="bg-white text-black p-6 rounded-xl w-[520px] space-y-4 max-h-[90vh] overflow-y-auto">
 
-            <h3 className="text-lg font-bold">
-              Update Invoice {form.invoice}
+            <h3 className="text-lg font-bold mb-2">
+              Update Sales Entry
             </h3>
 
-            <input
-              type="date"
-              value={form.date?.slice(0,10)}
-              onChange={e => setForm({...form, date: e.target.value})}
-              className="w-full border p-2 rounded"
-            />
+            <div className="space-y-3">
+
+              <div>
+                <label className="text-sm font-semibold block mb-1">
+                  Invoice Number
+                </label>
+                <input
+                  value={form.invoice}
+                  onChange={e => setForm({ ...form, invoice: e.target.value })}
+                  className="w-full border p-2 rounded"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold block mb-1">
+                  Customer Name
+                </label>
+                <input
+                  value={form.customer}
+                  onChange={e => setForm({ ...form, customer: e.target.value })}
+                  className="w-full border p-2 rounded"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold block mb-1">
+                  Invoice Date
+                </label>
+                <input
+                  type="date"
+                  value={form.date?.slice(0,10)}
+                  onChange={e => setForm({...form, date: e.target.value})}
+                  className="w-full border p-2 rounded"
+                />
+              </div>
+
+            </div>
 
             {form.items.map((item: any, idx: number) => (
               <div key={idx} className="border p-3 rounded space-y-2">
@@ -230,28 +261,72 @@ export default function SalesPage() {
                   className="w-full border p-2 rounded"
                 />
 
-                <input
-                  type="number"
-                  value={item.qty}
-                  onChange={e => {
-                    const copy = [...form.items];
-                    copy[idx].qty = Number(e.target.value);
-                    copy[idx].total = copy[idx].qty * copy[idx].price;
-                    setForm({...form, items: copy});
-                  }}
-                  placeholder="Quantity"
-                  className="w-full border p-2 rounded"
-                />
+                <div>
+                  <label className="text-sm font-semibold block mb-1">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    value={item.qty}
+                    onChange={e => {
+                      const copy = [...form.items];
+                      copy[idx].qty = Number(e.target.value);
+                      copy[idx].total = copy[idx].qty * copy[idx].price;
+                      setForm({...form, items: copy});
+                    }}
+                    className="w-full border p-2 rounded"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold block mb-1">
+                    Price
+                  </label>
+                  <input
+                    type="number"
+                    value={item.price}
+                    onChange={e => {
+                      const copy = [...form.items];
+                      copy[idx].price = Number(e.target.value);
+                      copy[idx].total = copy[idx].qty * copy[idx].price;
+                      setForm({ ...form, items: copy });
+                    }}
+                    className="w-full border p-2 rounded"
+                  />
+                </div>
+
+                <div className="text-sm font-semibold">
+                  Line Total: ₹{item.total}
+                </div>
               </div>
             ))}
 
-            <input
-              type="number"
-              value={form.paid || 0}
-              onChange={e => setForm({ ...form, paid: Number(e.target.value) })}
-              placeholder="Paid amount"
-              className="w-full border p-2 rounded"
-            />
+            <button
+              onClick={() => {
+                setForm({
+                  ...form,
+                  items: [
+                    ...form.items,
+                    { name: "", qty: 1, price: 0, total: 0 }
+                  ],
+                });
+              }}
+              className="bg-blue-500 text-white px-3 py-2 rounded w-full"
+            >
+              + Add Item
+            </button>
+
+            <div>
+              <label className="text-sm font-semibold block mb-1">
+                Paid Amount
+              </label>
+              <input
+                type="number"
+                value={form.paid || 0}
+                onChange={e => setForm({ ...form, paid: Number(e.target.value) })}
+                className="w-full border p-2 rounded"
+              />
+            </div>
 
             <div className="flex gap-3">
               <button

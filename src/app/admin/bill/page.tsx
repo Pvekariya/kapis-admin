@@ -11,11 +11,13 @@ type Item = {
 
 export default function BillPage() {
   const [inventory, setInventory] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<string[]>([]);
   const [customer, setCustomer] = useState("");
   const [address, setAddress] = useState("");
   const [invoice, setInvoice] = useState("");
   const [note, setNote] = useState("");
   const [today, setToday] = useState("");
+  const [billDate, setBillDate] = useState("");
 
   const [paid, setPaid] = useState("");
   const [paidDate, setPaidDate] = useState("");
@@ -30,11 +32,35 @@ export default function BillPage() {
 
   useEffect(() => {
     fetch("/api/inventory").then(r => r.json()).then(setInventory);
-    fetch("/api/sales/next")
+    fetch("/api/sales")
+      .then(r => r.json())
+      .then(data => {
+        const unique = Array.from(
+          new Set(
+            (data || [])
+              .map((s: any) => s.customer)
+              .filter((c: string) => c && c.trim() !== "")
+          )
+        );
+        setCustomers(unique as string[]);
+      });
+    const isoToday = new Date().toISOString().slice(0, 10);
+    setBillDate(isoToday);
+
+    fetch(`/api/sales/next?customDate=${isoToday}`)
       .then(r => r.json())
       .then(d => setInvoice(d.invoice || "001"));
-    setToday(new Date().toLocaleDateString("en-IN"));
   }, []);
+
+  useEffect(() => {
+    if (!billDate) return;
+
+    fetch(`/api/sales/next?customDate=${billDate}`)
+      .then(r => r.json())
+      .then(d => setInvoice(d.invoice || invoice));
+
+    setToday(new Date(billDate).toLocaleDateString("en-IN"));
+  }, [billDate]);
 
   const addRow = () =>
     setItems(prev => [
@@ -126,12 +152,23 @@ export default function BillPage() {
       {/* LEFT PANEL */}
       <div className="w-96 space-y-4 print:hidden">
 
-        <input
-          placeholder="Customer"
-          value={customer}
-          onChange={e => setCustomer(e.target.value)}
-          className="input"
-        />
+        <div>
+          <label className="block text-sm font-semibold mb-1">
+            Customer Name
+          </label>
+          <input
+            list="customerList"
+            placeholder="Select or enter customer"
+            value={customer}
+            onChange={e => setCustomer(e.target.value)}
+            className="input"
+          />
+          <datalist id="customerList">
+            {customers.map((c, i) => (
+              <option key={i} value={c} />
+            ))}
+          </datalist>
+        </div>
 
         <textarea
           placeholder="Address"
@@ -146,7 +183,12 @@ export default function BillPage() {
           className="input h-16"
         />
 
-        <input value={invoice} readOnly className="input bg-gray-800" />
+        <input
+          placeholder="Invoice No"
+          value={invoice}
+          onChange={e => setInvoice(e.target.value)}
+          className="input"
+        />
 
         <div className="grid grid-cols-3 gap-2">
           <input placeholder="CGST %" value={cgst}
@@ -166,8 +208,8 @@ export default function BillPage() {
           />
           <input
             type="date"
-            value={paidDate}
-            onChange={e => setPaidDate(e.target.value)}
+            value={billDate}
+            onChange={e => setBillDate(e.target.value)}
             className="input"
           />
         </div>

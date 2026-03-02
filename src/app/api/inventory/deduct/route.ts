@@ -97,6 +97,18 @@ export async function POST(req: Request) {
     });
   }
 
+  // 🔒 CHECK FOR DUPLICATE INVOICE
+  const existingInvoice = await db.collection("sales").findOne({
+    invoice: body.invoice,
+  });
+
+  if (existingInvoice) {
+    return NextResponse.json(
+      { success: false, message: "Invoice already exists" },
+      { status: 400 }
+    );
+  }
+
   await db.collection("sales").insertOne({
     invoice: body.invoice,
     customer: body.customer,
