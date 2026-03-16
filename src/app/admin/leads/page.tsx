@@ -4,193 +4,167 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
-const statusColors: any = {
-  new: "bg-blue-500",
-  contacted: "bg-yellow-500",
-  closed: "bg-green-500",
+const STATUS_BADGE: Record<string, string> = {
+  new: "badge-blue",
+  contacted: "badge-amber",
+  closed: "badge-green",
 };
 
-const months = [
+const MONTHS = [
   { label: "All Months", value: "" },
-  { label: "January", value: 0 },
-  { label: "February", value: 1 },
-  { label: "March", value: 2 },
-  { label: "April", value: 3 },
-  { label: "May", value: 4 },
-  { label: "June", value: 5 },
-  { label: "July", value: 6 },
-  { label: "August", value: 7 },
-  { label: "September", value: 8 },
-  { label: "October", value: 9 },
-  { label: "November", value: 10 },
-  { label: "December", value: 11 },
+  ...["January","February","March","April","May","June",
+    "July","August","September","October","November","December",
+  ].map((label, i) => ({ label, value: String(i) })),
 ];
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<any[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<any>("");
-  const [selectedYear, setSelectedYear] = useState<any>("");
-
-  useEffect(() => {
-    load();
-  }, []);
+  const [leads, setLeads]               = useState<any[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear]   = useState("");
+  const [search, setSearch]             = useState("");
+  const [loading, setLoading]           = useState(true);
 
   const load = () => {
-    fetch("/api/admin")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setLeads(data);
-      });
+    fetch("/api/admin", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setLeads(d); })
+      .finally(() => setLoading(false));
   };
+
+  useEffect(() => { load(); }, []);
 
   const updateStatus = async (id: string, status: string) => {
     await fetch("/api/admin", {
-      method: "PATCH",
+      method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     });
-
     load();
   };
 
-  // 🔎 Filtered Leads
-  const filteredLeads = useMemo(() => {
-    return leads.filter((l) => {
+  const filtered = useMemo(() => {
+    return leads.filter(l => {
       const date = new Date(l.createdAt || l.date);
-      const monthMatch =
-        selectedMonth === "" || date.getMonth() === Number(selectedMonth);
-      const yearMatch =
-        selectedYear === "" || date.getFullYear() === Number(selectedYear);
-      return monthMatch && yearMatch;
+      const monthMatch = selectedMonth === "" || date.getMonth() === Number(selectedMonth);
+      const yearMatch  = selectedYear  === "" || date.getFullYear() === Number(selectedYear);
+      const searchMatch = search === "" ||
+        l.name?.toLowerCase().includes(search.toLowerCase()) ||
+        l.email?.toLowerCase().includes(search.toLowerCase());
+      return monthMatch && yearMatch && searchMatch;
     });
-  }, [leads, selectedMonth, selectedYear]);
+  }, [leads, selectedMonth, selectedYear, search]);
 
-  // 📅 Available Years from data
   const availableYears = Array.from(
     new Set(
       leads
-        .map((l) => {
-          const d = new Date(l.createdAt || l.date);
-          return isNaN(d.getTime()) ? null : d.getFullYear();
-        })
-        .filter((y) => y !== null)
+        .map(l => new Date(l.createdAt || l.date).getFullYear())
+        .filter(y => !isNaN(y))
     )
-  ).sort((a: any, b: any) => b - a);
+  ).sort((a, b) => b - a);
 
-  // 📤 Export Excel
   const exportExcel = () => {
-    const clean = filteredLeads.map((l) => ({
-      Name: l.name,
-      Email: l.email,
-      Mobile: l.phone || "-",
-      Product: l.product || "-",
-      Status: l.status || "new",
+    const ws = XLSX.utils.json_to_sheet(filtered.map(l => ({
+      Name: l.name, Email: l.email, Mobile: l.phone || "-",
+      Product: l.product || "-", Status: l.status || "new",
       Date: new Date(l.createdAt || l.date).toLocaleString(),
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(clean);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Leads");
-
-    const excelBuffer = XLSX.write(workbook, {
-      bookType: "xlsx",
-      type: "array",
-    });
-
-    const blob = new Blob([excelBuffer], {
-      type: "application/octet-stream",
-    });
-
-    saveAs(blob, "leads.xlsx");
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Leads");
+    saveAs(
+      new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })],
+      { type: "application/octet-stream" }),
+      "leads.xlsx"
+    );
   };
 
   return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-4">Leads</h2>
+    <div className="fade-in">
 
-      {/* Filters */}
-      <div className="flex gap-4 mb-4">
-        <select
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-          className="px-3 py-2 border border-[var(--border)] rounded bg-[var(--panel)]"
-        >
-          {months.map((m) => (
-            <option key={m.label} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(e.target.value)}
-          className="px-3 py-2 border border-[var(--border)] rounded bg-[var(--panel)]"
-        >
-          <option value="">All Years</option>
-          {availableYears.map((y: any) => (
-            <option key={y} value={String(y)}>
-              {y}
-            </option>
-          ))}
-        </select>
-
-        <button
-          onClick={exportExcel}
-          className="px-4 py-2 rounded border border-[var(--border)] bg-[var(--panel)]"
-        >
-          Export Excel
-        </button>
+      {/* Header */}
+      <div className="page-header">
+        <h1 className="page-title">Leads</h1>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span className="badge badge-blue">{filtered.length} leads</span>
+          <button className="btn" onClick={exportExcel}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export Excel
+          </button>
+        </div>
       </div>
 
-      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b border-[var(--border)]">
+      {/* Filters */}
+      <div className="g-panel" style={{ padding: 14, display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        <input className="input" placeholder="Search name / email…"
+          value={search} onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: 240 }} />
+        <select className="input" value={selectedMonth}
+          onChange={e => setSelectedMonth(e.target.value)} style={{ maxWidth: 160 }}>
+          {MONTHS.map(m => <option key={m.label} value={m.value}>{m.label}</option>)}
+        </select>
+        <select className="input" value={selectedYear}
+          onChange={e => setSelectedYear(e.target.value)} style={{ maxWidth: 130 }}>
+          <option value="">All Years</option>
+          {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <button className="btn" onClick={() => {
+          setSearch(""); setSelectedMonth(""); setSelectedYear("");
+        }}>Reset</button>
+      </div>
+
+      {/* Table */}
+      <div className="g-table">
+        <table>
+          <thead>
             <tr>
-              <th className="p-3 text-left">Name</th>
-              <th className="p-3 text-left">Email</th>
-              <th className="p-3 text-left">Mobile</th>
-              <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-left">Date</th>
-              <th className="p-3 text-left">Status</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Mobile</th>
+              <th>Product</th>
+              <th>Date</th>
+              <th>Status</th>
             </tr>
           </thead>
-
           <tbody>
-            {filteredLeads.map((l) => (
-              <tr key={l._id} className="border-b border-[var(--border)]">
-                <td className="p-3">{l.name}</td>
-                <td className="p-3">{l.email}</td>
-                <td className="p-3">{l.phone || "-"}</td>
-                <td className="p-3">{l.product || "-"}</td>
-                <td className="p-3">
+            {loading ? (
+              <tr><td colSpan={6}>
+                <div style={{ display:"flex", justifyContent:"center", padding:"32px 0" }}>
+                  <div className="spinner" />
+                </div>
+              </td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6} style={{ textAlign:"center", padding:"32px 0", color:"var(--text-3)" }}>
+                No leads found
+              </td></tr>
+            ) : filtered.map(l => (
+              <tr key={l._id}>
+                <td style={{ fontWeight: 500 }}>{l.name}</td>
+                <td style={{ color: "var(--text-2)" }}>{l.email}</td>
+                <td>{l.phone || "—"}</td>
+                <td>{l.product || "—"}</td>
+                <td style={{ fontSize: 12, color: "var(--text-2)" }}>
                   {new Date(l.createdAt || l.date).toLocaleDateString()}
                 </td>
-
-                <td className="p-3">
+                <td>
                   <select
                     value={l.status || "new"}
-                    onChange={(e) =>
-                      updateStatus(l._id, e.target.value)
-                    }
-                    className={`px-3 py-1 rounded text-white ${statusColors[l.status || "new"]}`}
+                    onChange={e => updateStatus(l._id, e.target.value)}
+                    className={`badge ${STATUS_BADGE[l.status || "new"]}`}
+                    style={{ border: "none", cursor: "pointer", background: "transparent", font: "inherit" }}
                   >
-                    <option value="new">new</option>
-                    <option value="contacted">contacted</option>
-                    <option value="closed">closed</option>
+                    <option value="new">New</option>
+                    <option value="contacted">Contacted</option>
+                    <option value="closed">Closed</option>
                   </select>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        {filteredLeads.length === 0 && (
-          <div className="p-6 text-center text-gray-400">
-            No leads found for selected period.
-          </div>
-        )}
       </div>
+
     </div>
   );
 }

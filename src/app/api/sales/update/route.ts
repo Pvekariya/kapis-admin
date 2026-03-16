@@ -1,107 +1,104 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { guardAuth } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
+
+const UpdateSchema = z.object({
+  id: z.string().min(1),
+  update: z.object({
+    invoice: z.string().max(50).optional(),
+    customer: z.string().max(200).optional(),
+    address: z.string().max(500).optional(),
+    date: z.string().optional(),
+    gstRate: z.number().min(0).max(100).optional(),
+    paid: z.number().min(0).optional(),
+    items: z.array(z.object({
+      productId: z.string().optional(),
+      name: z.string().max(200),
+      qty: z.number().min(0),
+      price: z.number().min(0),
+    })).optional(),
+  }),
+});
 
 export async function POST(req: Request) {
-  try {
-    const { id, update } = await req.json();
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
 
-    if (!id) {
-      return NextResponse.json({
-        success: false,
-        error: "Missing ID",
-      });
-    }
+  const body = await req.json();
+  const parsed = UpdateSchema.safeParse(body);
+  if (!parsed.success)
+    return NextResponse.json({ error: "Invalid data" }, { status: 400 });
 
-    const db = await getDb();
+  const { id, update } = parsed.data;
+  const db = await getDb();
 
-    const salesCol = db.collection("sales");
-    const inventoryCol = db.collection("inventory");
+  const oldDoc = await db
+    .collection("sales")
+    .findOne({ _id: new ObjectId(id) });
+  if (!oldDoc)
+    return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-    // fetch old invoice to reverse previous stock
-    const oldDoc = await salesCol.findOne({ _id: new ObjectId(id) });
+  const items = (update.items ?? oldDoc.items ?? []).map((item: any) => ({
+    ...item,
+    qty: Number(item.qty ?? 0),
+    price: Number(item.price ?? 0),
+    total: Number(item.qty ?? 0) * Number(item.price ?? 0),
+  }));
 
-    if (!oldDoc) {
-      return NextResponse.json({
-        success: false,
-        error: "Invoice not found",
-      });
-    }
+  const subtotal = items.reduce((s: number, i: any) => s + i.total, 0);
+  const gstRate = update.gstRate ?? 12;
+  const gst = Math.round(subtotal * (gstRate / 100));
+  const total = subtotal + gst;
 
-    const items = update.items || [];
+  // Inventory delta adjustment
+  const inventoryCol = db.collection("inventory");
+  const oldMap: Record<string, number> = {};
+  const newMap: Record<string, number> = {};
 
-    const subtotal = items.reduce((sum: number, item: any) => {
-      const itemTotal =
-        Number(item.qty || 0) * Number(item.price || 0);
-      item.total = itemTotal;
-      return sum + itemTotal;
-    }, 0);
+  (oldDoc.items ?? []).forEach((i: any) => {
+    if (i.productId)
+      oldMap[i.productId.toString()] =
+        (oldMap[i.productId.toString()] ?? 0) + Number(i.qty ?? 0);
+  });
 
-    const gst = Math.round(subtotal * 0.12); // 12% GST (adjust if needed)
-    const grandTotal = subtotal + gst;
+  items.forEach((i: any) => {
+    if (i.productId)
+      newMap[i.productId.toString()] =
+        (newMap[i.productId.toString()] ?? 0) + Number(i.qty ?? 0);
+  });
 
-    /* ---- INVENTORY ADJUSTMENT ---- */
-
-    // map old quantities
-    const oldMap: Record<string, number> = {};
-    (oldDoc.items || []).forEach((item: any) => {
-      oldMap[item.productId] =
-        (oldMap[item.productId] || 0) + Number(item.qty || 0);
-    });
-
-    // map new quantities
-    const newMap: Record<string, number> = {};
-    items.forEach((item: any) => {
-      newMap[item.productId] =
-        (newMap[item.productId] || 0) + Number(item.qty || 0);
-    });
-
-    // compute delta and apply
-    const productIds = new Set([
-      ...Object.keys(oldMap),
-      ...Object.keys(newMap),
-    ]);
-
-    for (const pid of productIds) {
-      const oldQty = oldMap[pid] || 0;
-      const newQty = newMap[pid] || 0;
-      const diff = newQty - oldQty;
-
-      if (diff !== 0) {
-        // if diff positive → reduce inventory
-        // if diff negative → restore inventory
+  const allIds = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
+  for (const pid of allIds) {
+    const diff = (newMap[pid] ?? 0) - (oldMap[pid] ?? 0);
+    if (diff !== 0) {
+      try {
         await inventoryCol.updateOne(
           { _id: new ObjectId(pid) },
           { $inc: { stock: -diff } }
         );
-      }
+      } catch {}
     }
-
-    await salesCol.updateOne(
-      { _id: new ObjectId(id) },
-      {
-        $set: {
-          date: new Date(update.date),
-          items,
-          customer: update.customer,
-          address: update.address,
-          subtotal,
-          gst,
-          total: grandTotal,
-        },
-      }
-    );
-
-    return NextResponse.json({
-      success: true,
-    });
-
-  } catch (err) {
-    console.error("UPDATE ERROR:", err);
-
-    return NextResponse.json({
-      success: false,
-      error: "Server error",
-    });
   }
+
+  await db.collection("sales").updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        invoice: update.invoice ?? oldDoc.invoice,
+        customer: update.customer ?? oldDoc.customer,
+        address: update.address ?? oldDoc.address,
+        date: update.date ? new Date(update.date) : oldDoc.date,
+        items,
+        subtotal,
+        gst,
+        total,
+        paid: update.paid ?? oldDoc.paid ?? 0,
+        updatedAt: new Date(),
+      },
+    }
+  );
+
+  return NextResponse.json({ success: true });
 }

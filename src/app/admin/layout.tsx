@@ -1,19 +1,36 @@
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
-import { Inter } from "next/font/google";
 
-const inter = Inter({ subsets: ["latin"] });
-
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <div
-      className={`${inter.className} flex min-h-screen text-gray-200 bg-gradient-to-br from-[#0a0f1c] via-[#0b1020] to-[#05070d]`}
-    >
+    <div style={{
+      display: "flex",
+      minHeight: "100vh",
+      background: "var(--bg)",
+      color: "var(--text)",
+      fontFamily: "Inter, system-ui, sans-serif",
+    }}>
       <Sidebar />
-
-      <div className="flex-1 flex flex-col">
+      <div style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        minWidth: 0,
+        overflow: "hidden",
+      }}>
         <Header />
-        <main className="p-6">{children}</main>
+        <main style={{
+          flex: 1,
+          padding: "24px",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}>
+          {children}
+        </main>
       </div>
     </div>
   );

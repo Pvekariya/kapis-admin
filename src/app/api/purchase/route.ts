@@ -1,139 +1,111 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { guardAuth } from "@/lib/auth";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
+
+const PurchaseSchema = z.object({
+  invoice: z.string().min(1).max(50),
+  supplier: z.string().min(1).max(200),
+  paymentMode: z.enum(["cash", "upi", "bank"]).default("cash"),
+  productType: z.enum(["raw", "finished"]).default("raw"),
+  items: z.array(z.object({
+    productId: z.string().optional(),
+    productName: z.string().max(200).optional(),
+    qty: z.number().positive(),
+    price: z.number().min(0),
+  })).min(1),
+});
 
 export async function POST(req: Request) {
-  try {
-    const db = await getDb();
-    const body = await req.json();
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
 
-    const {
-      invoice,
-      supplier,
-      items = [],
-      paymentMode = "cash",
-      productType = "raw",
-    } = body;
+  const body = await req.json();
+  const parsed = PurchaseSchema.safeParse({
+    ...body,
+    items: (body.items ?? []).map((i: any) => ({
+      ...i,
+      qty: Number(i.qty),
+      price: Number(i.price),
+    })),
+  });
 
-    if (!invoice || !supplier) {
-      return NextResponse.json(
-        { success: false, error: "Invoice and Supplier required" },
-        { status: 400 }
-      );
-    }
+  if (!parsed.success)
+    return NextResponse.json({ error: "Invalid data" }, { status: 400 });
 
-    if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "No items provided" },
-        { status: 400 }
-      );
-    }
+  const { invoice, supplier, paymentMode, productType, items } = parsed.data;
+  const db = await getDb();
+  const purchaseItems: any[] = [];
 
-    const purchaseItems: any[] = [];
+  for (const item of items) {
+    let product: any = null;
 
-    for (const i of items) {
-      const qty = Number(i.qty);
-      const price = Number(i.price);
-      if (qty <= 0 || price < 0) continue;
-
-      let product: any = null;
-      const productName = i.productName || i.name;
-
-      // Try find existing product
-      if (i.productId) {
-        try {
-          product = await db.collection("inventory").findOne({
-            _id: new ObjectId(i.productId),
-            type: productType,
-          });
-        } catch {}
-      }
-
-      if (!product && productName) {
+    if (item.productId) {
+      try {
         product = await db.collection("inventory").findOne({
-          name: productName,
+          _id: new ObjectId(item.productId),
           type: productType,
         });
-      }
+      } catch {}
+    }
 
-      // Update stock
-      if (product) {
-        const newStock = Number(product.stock || 0) + qty;
-
-        await db.collection("inventory").updateOne(
-          { _id: product._id },
-          { $set: { stock: newStock } }
-        );
-      }
-
-      // Create if not exists
-      if (!product && productName) {
-        const newProduct = {
-          name: productName,
-          stock: qty,
-          price,
-          type: productType,
-          createdAt: new Date(),
-        };
-
-        const result = await db.collection("inventory").insertOne(newProduct);
-        product = { ...newProduct, _id: result.insertedId };
-      }
-
-      if (!product) continue;
-
-      purchaseItems.push({
-        productId: product._id,
-        name: product.name,
-        qty,
-        price,
-        total: qty * price,
+    if (!product && item.productName) {
+      product = await db.collection("inventory").findOne({
+        name: item.productName,
+        type: productType,
       });
     }
 
-    if (purchaseItems.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "No valid purchase items" },
-        { status: 400 }
+    if (product) {
+      await db.collection("inventory").updateOne(
+        { _id: product._id },
+        { $inc: { stock: item.qty } }
       );
+    } else if (item.productName) {
+      const res = await db.collection("inventory").insertOne({
+        name: item.productName,
+        stock: item.qty,
+        price: item.price,
+        costPrice: item.price,
+        type: productType,
+        color: "", hsn: "", packing: "",
+        createdAt: new Date(),
+      });
+      product = { _id: res.insertedId, name: item.productName };
     }
 
-    const total = purchaseItems.reduce((sum, item) => sum + item.total, 0);
+    if (!product) continue;
 
-    // ✅ SAVE PURCHASE LEDGER ENTRY
-    const purchaseDoc = {
-      invoice,
-      supplier,
-      items: purchaseItems,
-      total: Number(total),
-      paymentMode,
-      productType,
-      date: new Date(),
-      createdAt: new Date(),
-    };
-
-    const purchaseResult = await db
-      .collection("purchase")
-      .insertOne(purchaseDoc);
-
-    // ✅ INSERT DAYBOOK EXPENSE ENTRY
-    await db.collection("daybook").insertOne({
-      type: "expense",
-      category: "purchase",
-      referenceId: purchaseResult.insertedId,
-      description: `Purchase Invoice #${invoice} - ${supplier}`,
-      amount: Number(total),
-      paymentMode,
-      date: new Date(),
-      createdAt: new Date(),
+    purchaseItems.push({
+      productId: product._id,
+      name: product.name,
+      qty: item.qty,
+      price: item.price,
+      total: item.qty * item.price,
     });
-
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error("Purchase Error:", error);
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
   }
+
+  if (!purchaseItems.length)
+    return NextResponse.json({ error: "No valid items" }, { status: 400 });
+
+  const total = purchaseItems.reduce((s, i) => s + i.total, 0);
+
+  const result = await db.collection("purchase").insertOne({
+    invoice, supplier, items: purchaseItems, total,
+    paymentMode, productType,
+    date: new Date(), createdAt: new Date(),
+  });
+
+  await db.collection("daybook").insertOne({
+    type: "expense",
+    category: "purchase",
+    referenceId: result.insertedId,
+    description: `Purchase Invoice #${invoice} - ${supplier}`,
+    amount: total,
+    paymentMode,
+    date: new Date(), createdAt: new Date(),
+  });
+
+  return NextResponse.json({ success: true });
 }

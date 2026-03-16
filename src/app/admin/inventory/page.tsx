@@ -8,81 +8,53 @@ export default function InventoryPage() {
   const pathname = usePathname();
   const inventoryType = pathname.includes("/raw") ? "raw" : "finished";
 
-  const [items, setItems] = useState<any[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [editing, setEditing] = useState<any | null>(null);
+  const [items, setItems]         = useState<any[]>([]);
+  const [selected, setSelected]   = useState<string[]>([]);
+  const [editing, setEditing]     = useState<any | null>(null);
   const [purchasing, setPurchasing] = useState<any | null>(null);
   const [purchaseQty, setPurchaseQty] = useState(1);
-
-  const [form, setForm] = useState({
-    name: "",
-    stock: "",
-    price: "",
-    hsn: "",
-    color: "",
-    type: inventoryType,
-    packing: "",
+  const [loading, setLoading]     = useState(true);
+  const [form, setForm]           = useState({
+    name: "", stock: "", price: "", hsn: "", color: "", packing: "",
   });
 
   const load = async () => {
-    const res = await fetch("/api/inventory", { cache: "no-store" });
+    const res  = await fetch("/api/inventory", { credentials: "include" });
     const data = await res.json();
-    setItems([...data]);
+    setItems(Array.isArray(data) ? data : []);
+    setLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  useEffect(() => {
-    setForm(prev => ({ ...prev, type: inventoryType }));
-  }, [inventoryType]);
+  useEffect(() => { load(); }, []);
 
   const addItem = async () => {
+    if (!form.name.trim()) return;
     await fetch("/api/inventory", {
-      method: "POST",
+      method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...form,
-        type: inventoryType,
-        stock: Number(form.stock),
-        price: Number(form.price),
+        ...form, type: inventoryType,
+        stock: Number(form.stock), price: Number(form.price),
       }),
     });
-
-    setForm({
-      name: "",
-      stock: "",
-      price: "",
-      hsn: "",
-      color: "",
-      type: inventoryType,
-      packing: "",
-    });
-
+    setForm({ name: "", stock: "", price: "", hsn: "", color: "", packing: "" });
     load();
   };
 
   const update = async (id: string, data: any) => {
     const { _id, ...clean } = data;
-
     await fetch("/api/inventory", {
-      method: "PATCH",
+      method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id,
-        ...clean,
-        stock: Number(clean.stock),
-        price: Number(clean.price),
-      }),
+      body: JSON.stringify({ id, ...clean, stock: Number(clean.stock), price: Number(clean.price) }),
     });
-
-    await load();
+    load();
   };
 
   const remove = async (id: string) => {
+    if (!confirm("Delete this item?")) return;
     await fetch("/api/inventory", {
-      method: "DELETE",
+      method: "DELETE", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
@@ -90,195 +62,266 @@ export default function InventoryPage() {
   };
 
   const exportExcel = () => {
-    const data = items
-      .filter(i => i.type === inventoryType)
-      .filter(i => selected.includes(i._id));
-
-    const ws = XLSX.utils.json_to_sheet(data);
+    const rows = items.filter(i => i.type === inventoryType && selected.includes(i._id));
+    if (!rows.length) { alert("Select items to export first"); return; }
+    const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventory");
     XLSX.writeFile(wb, `${inventoryType}-inventory.xlsx`);
   };
 
-  const filteredItems = items.filter(i => i.type === inventoryType);
+  const filtered   = items.filter(i => i.type === inventoryType);
+  const totalValue = filtered.reduce((s, i) => s + Number(i.stock) * Number(i.price), 0);
+  const lowCount   = filtered.filter(i => Number(i.stock) < 5).length;
+  const allChecked = selected.length === filtered.length && filtered.length > 0;
 
-  const totalValue = filteredItems.reduce(
-    (sum, i) => sum + Number(i.stock) * Number(i.price),
-    0
-  );
-
-  const lowStockCount = filteredItems.filter(
-    i => Number(i.stock) < 5
-  ).length;
+  const FIELDS: [string, string][] = [
+    ["Name", "name"], ["Stock", "stock"], ["Price", "price"],
+    ["HSN", "hsn"], ["Color", "color"], ["Packing", "packing"],
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="fade-in">
 
-      <h2 className="text-2xl font-semibold">
-        {inventoryType === "raw" ? "Raw Materials" : "Finished Products"}
-      </h2>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
-          <p className="text-sm opacity-70">Total Inventory Value</p>
-          <p className="text-xl font-semibold mt-1">₹{totalValue}</p>
-        </div>
-
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
-          <p className="text-sm opacity-70">Low Stock Items</p>
-          <p className="text-xl font-semibold mt-1">{lowStockCount}</p>
-        </div>
-      </div>
-
-      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4 grid grid-cols-4 gap-3">
-
-        {["name","stock","price","hsn","color","packing"].map(k => (
-          <input
-            key={k}
-            placeholder={k}
-            value={(form as any)[k]}
-            onChange={e =>
-              setForm({ ...form, [k]: e.target.value })
-            }
-            className="input"
-          />
-        ))}
-
-        <button onClick={addItem} className="btn bg-blue-600">
-          Add Product
+      {/* ── Header ───────────────────────────────────────────── */}
+      <div className="page-header">
+        <h1 className="page-title">
+          {inventoryType === "raw" ? "Raw Materials" : "Finished Products"}
+        </h1>
+        <button className="btn" onClick={exportExcel}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export Selected
         </button>
+      </div>
+
+      {/* ── Stat cards ───────────────────────────────────────── */}
+      <div className="grid-2" style={{ marginBottom: 20 }}>
+
+        <div className="stat-card sc-blue">
+          <div className="sc-border" />
+          <div className="sc-glow" />
+          <p className="sc-label">Total Inventory Value</p>
+          <p className="sc-value">₹{Math.round(totalValue).toLocaleString("en-IN")}</p>
+        </div>
+
+        <div className="stat-card sc-red">
+          <div className="sc-border" />
+          <div className="sc-glow" />
+          <p className="sc-label">Low Stock Items (&lt; 5)</p>
+          <p className="sc-value">{lowCount}</p>
+          {lowCount === 0 && <p className="sc-sub">All stock levels healthy</p>}
+        </div>
 
       </div>
 
-      <button onClick={exportExcel} className="btn bg-green-600">
-        Export Selected
-      </button>
+      {/* ── Add product form ─────────────────────────────────── */}
+      <div className="g-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
+        <p className="section-label">Add Product</p>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr auto",
+          gap: 10,
+          alignItems: "end",
+        }}>
+          {FIELDS.map(([placeholder, key]) => (
+            <div className="field" key={key}>
+              <label className="field-label">{placeholder}</label>
+              <input
+                className="input"
+                placeholder={placeholder}
+                value={(form as any)[key]}
+                onChange={e => setForm({ ...form, [key]: e.target.value })}
+                type={key === "stock" || key === "price" ? "number" : "text"}
+                min={0}
+              />
+            </div>
+          ))}
+          <button className="btn btn-primary" onClick={addItem} style={{ alignSelf: "end" }}>
+            Add
+          </button>
+        </div>
+      </div>
 
-      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-
-        <table className="w-full text-sm">
-
-          <thead className="border-b border-[var(--border)] bg-black/10">
+      {/* ── Table ────────────────────────────────────────────── */}
+      <div className="g-table">
+        <table>
+          <thead>
             <tr>
-              <th className="p-3">Select</th>
-              <th className="p-3">Name</th>
-              <th className="p-3 text-center">Stock</th>
-              <th className="p-3 text-center">HSN</th>
-              <th className="p-3 text-center">Color</th>
-              <th className="p-3 text-center">Packing</th>
-              <th className="p-3 text-center">Price</th>
-              <th className="p-3 text-center">Actions</th>
+              <th style={{ width: 44 }}>
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={e =>
+                    setSelected(e.target.checked ? filtered.map(i => i._id) : [])
+                  }
+                  style={{ accentColor: "var(--accent)", cursor: "pointer" }}
+                />
+              </th>
+              <th>Name</th>
+              <th>Stock</th>
+              <th>HSN</th>
+              <th>Color</th>
+              <th>Packing</th>
+              <th>Price</th>
+              <th>Actions</th>
             </tr>
           </thead>
-
           <tbody>
-            {filteredItems.map(i => (
-              <tr
-                key={i._id}
-                className={`border-b border-[var(--border)] ${
-                  Number(i.stock) < 5 ? "bg-red-500/10" : ""
-                }`}
-              >
-                <td className="p-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(i._id)}
-                    onChange={e =>
-                      setSelected(prev =>
-                        e.target.checked
-                          ? [...prev, i._id]
-                          : prev.filter(x => x !== i._id)
-                      )
-                    }
-                  />
-                </td>
-
-                <td className="p-3">{i.name}</td>
-                <td className="p-3 text-center font-semibold">{i.stock}</td>
-                <td className="p-3 text-center">{i.hsn}</td>
-                <td className="p-3 text-center">{i.color}</td>
-                <td className="p-3 text-center">{i.packing}</td>
-                <td className="p-3 text-center">₹{i.price}</td>
-
-                <td className="p-3 flex gap-2 justify-center">
-
-                  <button
-                    onClick={() => setPurchasing(i)}
-                    className="px-3 py-1 rounded bg-green-600 text-white text-xs"
-                  >
-                    Purchase
-                  </button>
-
-                  <button
-                    onClick={() => setEditing(i)}
-                    className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
-                  >
-                    Update
-                  </button>
-
-                  <button
-                    onClick={() => remove(i._id)}
-                    className="px-3 py-1 rounded bg-red-600 text-white text-xs"
-                  >
-                    Delete
-                  </button>
-
+            {loading ? (
+              <tr>
+                <td colSpan={8}>
+                  <div style={{ display: "flex", justifyContent: "center", padding: "32px 0" }}>
+                    <div className="spinner" />
+                  </div>
                 </td>
               </tr>
-            ))}
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", padding: "32px 0", color: "var(--text-3)" }}>
+                  No products yet — add one above
+                </td>
+              </tr>
+            ) : filtered.map(i => {
+              const isLow = Number(i.stock) < 5;
+              return (
+                <tr
+                  key={i._id}
+                  style={isLow ? { background: "var(--red-dim)" } : {}}
+                >
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(i._id)}
+                      onChange={e =>
+                        setSelected(prev =>
+                          e.target.checked ? [...prev, i._id] : prev.filter(x => x !== i._id)
+                        )
+                      }
+                      style={{ accentColor: "var(--accent)", cursor: "pointer" }}
+                    />
+                  </td>
+                  <td style={{ fontWeight: 500 }}>{i.name}</td>
+                  <td>
+                    <span className={isLow ? "badge badge-red" : "badge badge-green"}>
+                      {i.stock}
+                    </span>
+                  </td>
+                  <td style={{ color: "var(--text-2)", fontSize: 12 }}>{i.hsn || "—"}</td>
+                  <td>{i.color || "—"}</td>
+                  <td style={{ color: "var(--text-2)" }}>{i.packing || "—"}</td>
+                  <td style={{ fontWeight: 600, fontFamily: "'DM Mono', monospace", fontSize: 13 }}>
+                    ₹{i.price}
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="btn btn-success btn-sm"
+                        onClick={() => { setPurchaseQty(1); setPurchasing(i); }}
+                      >
+                        +Stock
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => setEditing({ ...i })}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => remove(i._id)}
+                      >
+                        Del
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
+      {/* ── Edit modal ───────────────────────────────────────── */}
       {editing && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
-          <div className="bg-[var(--panel)] p-6 rounded-xl w-[400px] space-y-3">
-            <h3 className="font-semibold">Edit Product</h3>
-            {["name","stock","price","hsn","color","packing"].map(k => (
-              <input
-                key={k}
-                value={editing[k]}
-                onChange={e =>
-                  setEditing({ ...editing, [k]: e.target.value })
-                }
-                className="input w-full"
-              />
-            ))}
-            <button
-              onClick={async () => {
-                await update(editing._id, editing);
-                setEditing(null);
-              }}
-              className="btn bg-blue-600 w-full"
-            >
-              Save
-            </button>
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Edit Product</h3>
+              <button className="btn btn-icon btn-sm" onClick={() => setEditing(null)}>✕</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {FIELDS.map(([placeholder, key]) => (
+                <div className="field" key={key}>
+                  <label className="field-label">{placeholder}</label>
+                  <input
+                    className="input"
+                    placeholder={placeholder}
+                    value={editing[key] ?? ""}
+                    type={key === "stock" || key === "price" ? "number" : "text"}
+                    onChange={e => setEditing({ ...editing, [key]: e.target.value })}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={async () => { await update(editing._id, editing); setEditing(null); }}
+              >
+                Save changes
+              </button>
+              <button className="btn" style={{ flex: 1 }} onClick={() => setEditing(null)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
 
+      {/* ── Add stock modal ──────────────────────────────────── */}
       {purchasing && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
-          <div className="bg-[var(--panel)] p-6 rounded-xl w-[300px] space-y-3">
-            <h3 className="font-semibold">Purchase Stock</h3>
-            <input
-              type="number"
-              value={purchaseQty}
-              onChange={e => setPurchaseQty(+e.target.value)}
-              className="input w-full"
-            />
-            <button
-              onClick={async () => {
-                await update(purchasing._id, {
-                  ...purchasing,
-                  stock: purchasing.stock + purchaseQty,
-                });
-                setPurchasing(null);
-              }}
-              className="btn bg-green-600 w-full"
-            >
-              Add Stock
-            </button>
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 340 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Add Stock</h3>
+              <button className="btn btn-icon btn-sm" onClick={() => setPurchasing(null)}>✕</button>
+            </div>
+            <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 14 }}>
+              {purchasing.name}
+              <span style={{ marginLeft: 8, fontSize: 11, color: "var(--text-3)" }}>
+                current: {purchasing.stock} units
+              </span>
+            </p>
+            <div className="field">
+              <label className="field-label">Quantity to add</label>
+              <input
+                type="number" className="input"
+                value={purchaseQty} min={1}
+                onChange={e => setPurchaseQty(Math.max(1, +e.target.value))}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button
+                className="btn btn-success"
+                style={{ flex: 1 }}
+                onClick={async () => {
+                  await update(purchasing._id, {
+                    ...purchasing,
+                    stock: Number(purchasing.stock) + purchaseQty,
+                  });
+                  setPurchasing(null);
+                }}
+              >
+                Add {purchaseQty} units
+              </button>
+              <button className="btn" style={{ flex: 1 }} onClick={() => setPurchasing(null)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

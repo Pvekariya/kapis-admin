@@ -2,324 +2,219 @@
 
 import { useEffect, useState } from "react";
 
+const fmt = (v: number) => Math.round(v || 0).toLocaleString("en-IN");
+
 export default function SalaryPage() {
   const today = new Date();
-  const [month, setMonth] = useState(today.getMonth() + 1);
-  const [year, setYear] = useState(today.getFullYear());
-  const [data, setData] = useState<any[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [month, setMonth]   = useState(today.getMonth() + 1);
+  const [year, setYear]     = useState(today.getFullYear());
+  const [data, setData]     = useState<any[]>([]);
+  const [advances, setAdvances] = useState<Record<string,any[]>>({});
+  const [advanceState, setAdvanceState] = useState<Record<string,{ amount:string; reason:string; paymentMode:string }>>({});
+  const [salaryMode, setSalaryMode]     = useState<Record<string,string>>({});
+  const [loading, setLoading] = useState(true);
 
-  const [advanceState, setAdvanceState] = useState<
-    Record<string, { amount: string; reason: string; paymentMode: string }>
-  >({});
-
-  const [salaryPaymentMode, setSalaryPaymentMode] = useState<
-    Record<string, string>
-  >({});
-
-  const [advances, setAdvances] = useState<Record<string, any[]>>({});
-
-  useEffect(() => {
-    fetchSalary();
-  }, [month, year]);
-
-  const fetchSalary = async () => {
-    const res = await fetch(`/api/staff/salary?month=${month}&year=${year}`);
-    if (!res.ok) return;
-
-    const result = await res.json();
-    if (!Array.isArray(result)) return;
-
-    setData(result);
-
-    const advRes = await fetch(`/api/staff/advances?month=${month}&year=${year}`);
-    if (advRes.ok) {
-      const advData = await advRes.json();
-      const grouped: Record<string, any[]> = {};
-      advData.forEach((a: any) => {
+  const load = async () => {
+    setLoading(true);
+    const [salRes, advRes] = await Promise.all([
+      fetch(`/api/staff/salary?month=${month}&year=${year}`, { credentials:"include" }),
+      fetch(`/api/staff/advances?month=${month}&year=${year}`, { credentials:"include" }),
+    ]);
+    const sal = await salRes.json();
+    const adv = await advRes.json();
+    setData(Array.isArray(sal) ? sal : []);
+    if (Array.isArray(adv)) {
+      const grouped: Record<string,any[]> = {};
+      adv.forEach((a:any) => {
         if (!grouped[a.staffId]) grouped[a.staffId] = [];
         grouped[a.staffId].push(a);
       });
       setAdvances(grouped);
     }
+    setLoading(false);
   };
+
+  useEffect(() => { load(); }, [month, year]); // eslint-disable-line
 
   const lockMonth = async (staffId: string) => {
     await fetch("/api/staff/salary", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method:"PUT", credentials:"include",
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ staffId, month, year }),
     });
-    fetchSalary();
+    load();
   };
 
   const markPaid = async (s: any) => {
     if (!s.remaining || s.remaining <= 0) return;
-
     await fetch("/api/staff/salary", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        staffId: s.staffId,
-        month,
-        year,
-        amount: s.remaining,
-        paymentMode: salaryPaymentMode[s.staffId] || "Cash",
-      }),
+      method:"POST", credentials:"include",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ staffId:s.staffId, month, year, amount:s.remaining, paymentMode:salaryMode[s.staffId]||"Cash" }),
     });
-
-    fetchSalary();
-  };
-
-  const handleAdvanceChange = (
-    staffId: string,
-    field: "amount" | "reason" | "paymentMode",
-    value: string
-  ) => {
-    setAdvanceState((prev) => ({
-      ...prev,
-      [staffId]: {
-        ...prev[staffId],
-        [field]: value,
-      },
-    }));
+    load();
   };
 
   const addAdvance = async (staffId: string) => {
     const entry = advanceState[staffId];
     if (!entry?.amount) return;
-
     await fetch("/api/staff/advances", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        staffId,
-        amount: Number(entry.amount),
-        reason: entry.reason || "",
-        paymentMode: entry.paymentMode || "Cash",
-        month,
-        year,
-      }),
+      method:"POST", credentials:"include",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ staffId, amount:Number(entry.amount), reason:entry.reason||"", paymentMode:entry.paymentMode||"Cash", month, year }),
     });
-
-    setAdvanceState((prev) => ({
-      ...prev,
-      [staffId]: { amount: "", reason: "", paymentMode: "" },
-    }));
-
-    fetchSalary();
+    setAdvanceState(prev => ({ ...prev, [staffId]:{ amount:"", reason:"", paymentMode:"" } }));
+    load();
   };
 
   const deleteAdvance = async (id: string) => {
     await fetch("/api/staff/advances", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      method:"DELETE", credentials:"include",
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ id }),
     });
-    fetchSalary();
+    load();
   };
 
-  const totalEarned = data.reduce((sum, s) => sum + (s.earned || 0), 0);
-  const totalAdvance = data.reduce((sum, s) => sum + (s.totalAdvance || 0), 0);
-  const totalRemaining = data.reduce((sum, s) => sum + (s.remaining || 0), 0);
+  const totalEarned    = data.reduce((s,d) => s + (d.earned||0), 0);
+  const totalAdvance   = data.reduce((s,d) => s + (d.totalAdvance||0), 0);
+  const totalRemaining = data.reduce((s,d) => s + (d.remaining||0), 0);
 
   return (
-    <div className="p-6 text-white">
-      <h1 className="text-2xl font-bold mb-6">Salary Management</h1>
+    <div className="fade-in">
 
-      <div className="flex gap-4 mb-6">
-        <select
-          value={month}
-          onChange={(e) => setMonth(Number(e.target.value))}
-          className="bg-[#111827] border border-gray-700 p-2 rounded"
-        >
-          {Array.from({ length: 12 }, (_, i) => (
-            <option key={i} value={i + 1}>
-              {new Date(0, i).toLocaleString("default", { month: "long" })}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-          className="bg-[#111827] border border-gray-700 p-2 rounded"
-        >
-          {[year - 1, year, year + 1].map((y) => (
-            <option key={y}>{y}</option>
-          ))}
-        </select>
+      {/* Header */}
+      <div className="page-header">
+        <h1 className="page-title">Salary Management</h1>
+        <div style={{ display:"flex", gap:8 }}>
+          <select className="input" value={month} onChange={e => setMonth(Number(e.target.value))} style={{ maxWidth:140 }}>
+            {Array.from({ length:12 },(_,i) => (
+              <option key={i} value={i+1}>
+                {new Date(0,i).toLocaleString("default",{ month:"long" })}
+              </option>
+            ))}
+          </select>
+          <select className="input" value={year} onChange={e => setYear(Number(e.target.value))} style={{ maxWidth:100 }}>
+            {[year-1, year, year+1].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-6 mb-8">
-        <Card title="Total Earned" value={totalEarned} />
-        <Card title="Total Advance" value={totalAdvance} />
-        <Card title="Net Payable" value={totalRemaining} />
-        <Card title="Active Staff" value={data.length} />
+      {/* Summary cards */}
+      <div className="grid-4" style={{ marginBottom:24 }}>
+        <div className="stat-card sc-green"><div className="sc-border"/><div className="sc-glow"/>
+          <p className="sc-label">Total Earned</p><p className="sc-value">₹{fmt(totalEarned)}</p>
+        </div>
+        <div className="stat-card sc-amber"><div className="sc-border"/><div className="sc-glow"/>
+          <p className="sc-label">Total Advance</p><p className="sc-value">₹{fmt(totalAdvance)}</p>
+        </div>
+        <div className="stat-card sc-blue"><div className="sc-border"/><div className="sc-glow"/>
+          <p className="sc-label">Net Payable</p><p className="sc-value">₹{fmt(totalRemaining)}</p>
+        </div>
+        <div className="stat-card sc-purple"><div className="sc-border"/><div className="sc-glow"/>
+          <p className="sc-label">Active Staff</p><p className="sc-value">{data.length}</p>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {data.map((s) => (
-          <div
-            key={s.staffId}
-            className="bg-[#0f172a] border border-gray-700 rounded-xl p-5"
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-semibold">{s.name}</h2>
-                <p className="text-sm text-gray-400">
-                  Monthly Salary: ₹{s.monthlySalary}
-                </p>
-              </div>
+      {/* Staff salary cards */}
+      {loading ? (
+        <div style={{ display:"flex", justifyContent:"center", padding:"48px 0" }}>
+          <div className="spinner" />
+        </div>
+      ) : data.map(s => (
+        <div key={s.staffId} className="g-card" style={{ padding:"20px 22px", marginBottom:12 }}>
 
-              <div className="text-right">
-                <p className="text-green-400">Earned: ₹{Math.round(s.earned)}</p>
-                <p className="text-yellow-400">Advance: ₹{s.totalAdvance}</p>
-                <p className="text-blue-400 font-bold">
-                  Remaining: ₹{Math.round(s.remaining)}
-                </p>
-              </div>
+          {/* Top row */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+            <div>
+              <p style={{ fontWeight:600, fontSize:15, color:"var(--text-1)", marginBottom:3 }}>{s.name}</p>
+              <p style={{ fontSize:12, color:"var(--text-3)" }}>
+                Monthly Salary: <span style={{ fontFamily:"'DM Mono',monospace" }}>₹{fmt(s.monthlySalary)}</span>
+                <span style={{ marginLeft:10 }}>· {s.workedUnits} days worked</span>
+              </p>
             </div>
-
-            <div className="mt-4 flex gap-3">
-              {!s.isLocked && (
-                <button
-                  onClick={() => lockMonth(s.staffId)}
-                  className="bg-blue-600 hover:bg-blue-700 transition px-4 py-2 rounded"
-                >
-                  Lock Month
-                </button>
-              )}
-
-              {s.isLocked && !s.isPaid && (
-                <>
-                  <select
-                    value={salaryPaymentMode[s.staffId] || "Cash"}
-                    onChange={(e) =>
-                      setSalaryPaymentMode((prev) => ({
-                        ...prev,
-                        [s.staffId]: e.target.value,
-                      }))
-                    }
-                    className="bg-[#111827] border border-gray-600 p-2 rounded"
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="UPI">UPI</option>
-                    <option value="Bank">Bank</option>
-                  </select>
-
-                  <button
-                    onClick={() => markPaid(s)}
-                    className="bg-green-600 px-4 py-2 rounded"
-                  >
-                    Mark Salary Paid
-                  </button>
-                </>
-              )}
-
-              {s.isPaid && (
-                <span className="text-green-400 font-semibold">
-                  Salary Paid ✓
+            <div style={{ textAlign:"right", display:"flex", flexDirection:"column", gap:3 }}>
+              <p style={{ fontSize:12 }}>
+                Earned: <span style={{ color:"var(--green)", fontWeight:600, fontFamily:"'DM Mono',monospace" }}>₹{fmt(s.earned)}</span>
+              </p>
+              <p style={{ fontSize:12 }}>
+                Advance: <span style={{ color:"var(--amber)", fontWeight:600, fontFamily:"'DM Mono',monospace" }}>₹{fmt(s.totalAdvance)}</span>
+              </p>
+              <p style={{ fontSize:13, fontWeight:700 }}>
+                Remaining: <span style={{ color: s.remaining < 0 ? "var(--red)" : "var(--blue)", fontFamily:"'DM Mono',monospace" }}>
+                  ₹{fmt(s.remaining)}
                 </span>
-              )}
+              </p>
             </div>
+          </div>
 
-            {/* Advance Section */}
-            <div className="mt-6 border-t border-gray-700 pt-4">
-              <h3 className="text-sm font-semibold mb-3 text-gray-300">
-                Advance Payment
-              </h3>
-
-              <div className="flex gap-3 mb-3">
-                <input
-                  type="number"
-                  placeholder="Amount"
-                  value={advanceState[s.staffId]?.amount || ""}
-                  onChange={(e) =>
-                    handleAdvanceChange(
-                      s.staffId,
-                      "amount",
-                      e.target.value
-                    )
-                  }
-                  className="bg-[#111827] border border-gray-600 p-2 rounded w-32"
-                />
-
-                <input
-                  type="text"
-                  placeholder="Reason"
-                  value={advanceState[s.staffId]?.reason || ""}
-                  onChange={(e) =>
-                    handleAdvanceChange(
-                      s.staffId,
-                      "reason",
-                      e.target.value
-                    )
-                  }
-                  className="bg-[#111827] border border-gray-600 p-2 rounded"
-                />
-
-                <select
-                  value={advanceState[s.staffId]?.paymentMode || "Cash"}
-                  onChange={(e) =>
-                    handleAdvanceChange(
-                      s.staffId,
-                      "paymentMode",
-                      e.target.value
-                    )
-                  }
-                  className="bg-[#111827] border border-gray-600 p-2 rounded"
-                >
+          {/* Action buttons */}
+          <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+            {!s.isLocked && (
+              <button className="btn btn-primary btn-sm" onClick={() => lockMonth(s.staffId)}>
+                Lock Month
+              </button>
+            )}
+            {s.isLocked && !s.isPaid && (
+              <>
+                <select className="input" style={{ maxWidth:120, height:30, fontSize:12 }}
+                  value={salaryMode[s.staffId]||"Cash"}
+                  onChange={e => setSalaryMode(prev => ({ ...prev, [s.staffId]:e.target.value }))}>
                   <option value="Cash">Cash</option>
                   <option value="UPI">UPI</option>
                   <option value="Bank">Bank</option>
                 </select>
-
-                <button
-                  onClick={() => addAdvance(s.staffId)}
-                  className="bg-yellow-600 px-4 py-2 rounded"
-                >
-                  Pay Advance
+                <button className="btn btn-success btn-sm" onClick={() => markPaid(s)}>
+                  Mark Salary Paid
                 </button>
-              </div>
-
-              {advances[s.staffId]?.length > 0 && (
-                <div className="space-y-2">
-                  {advances[s.staffId].map((a: any) => (
-                    <div
-                      key={a._id}
-                      className="flex justify-between items-center bg-[#111827] p-2 rounded"
-                    >
-                      <div>
-                        <p className="text-sm">₹{a.amount}</p>
-                        <p className="text-xs text-gray-400">
-                          {a.reason || "No reason"}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => deleteAdvance(a._id)}
-                        className="text-red-400 text-sm"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+              </>
+            )}
+            {s.isPaid && (
+              <span className="badge badge-green">✓ Salary Paid</span>
+            )}
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-function Card({ title, value }: any) {
-  return (
-    <div className="bg-[#0f172a] border border-gray-700 rounded-xl p-5">
-      <p className="text-gray-400 text-sm mb-2">{title}</p>
-      <h2 className="text-2xl font-bold">₹{Math.round(value || 0)}</h2>
+          {/* Advance section */}
+          <div style={{ borderTop:"1px solid var(--border)", paddingTop:14 }}>
+            <p className="section-label" style={{ marginBottom:10 }}>Advance Payment</p>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr 1fr auto", gap:8, marginBottom:10 }}>
+              <input type="number" className="input" placeholder="Amount"
+                value={advanceState[s.staffId]?.amount||""}
+                onChange={e => setAdvanceState(prev => ({ ...prev, [s.staffId]:{ ...prev[s.staffId], amount:e.target.value } }))} />
+              <input className="input" placeholder="Reason (optional)"
+                value={advanceState[s.staffId]?.reason||""}
+                onChange={e => setAdvanceState(prev => ({ ...prev, [s.staffId]:{ ...prev[s.staffId], reason:e.target.value } }))} />
+              <select className="input"
+                value={advanceState[s.staffId]?.paymentMode||"Cash"}
+                onChange={e => setAdvanceState(prev => ({ ...prev, [s.staffId]:{ ...prev[s.staffId], paymentMode:e.target.value } }))}>
+                <option value="Cash">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="Bank">Bank</option>
+              </select>
+              <button className="btn btn-warning btn-sm" onClick={() => addAdvance(s.staffId)}>
+                Pay
+              </button>
+            </div>
+
+            {/* Advance history */}
+            {(advances[s.staffId]||[]).map((a:any) => (
+              <div key={a._id} style={{
+                display:"flex", justifyContent:"space-between", alignItems:"center",
+                padding:"8px 12px", background:"var(--glass-1)", borderRadius:8,
+                marginBottom:6, border:"1px solid var(--border)",
+              }}>
+                <div>
+                  <p style={{ fontSize:13, fontWeight:600, fontFamily:"'DM Mono',monospace" }}>₹{fmt(a.amount)}</p>
+                  <p style={{ fontSize:11, color:"var(--text-3)" }}>{a.reason||"No reason"} · {a.paymentMode}</p>
+                </div>
+                <button className="btn btn-danger btn-sm" onClick={() => deleteAdvance(a._id)}>Delete</button>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      ))}
+
     </div>
   );
 }

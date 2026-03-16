@@ -3,151 +3,156 @@
 import { useEffect, useState } from "react";
 
 export default function StaffPage() {
-  const [staff, setStaff] = useState<any[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    role: "",
-    monthlySalary: "",
-  });
+  const [staff, setStaff]       = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<string|null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [form, setForm]         = useState({ name:"", phone:"", role:"", monthlySalary:"" });
 
-  const fetchStaff = async () => {
-    const res = await fetch("/api/staff");
+  const load = async () => {
+    const res  = await fetch("/api/staff", { credentials:"include" });
     const data = await res.json();
-    setStaff(data);
+    setStaff(Array.isArray(data) ? data : []);
+    setLoading(false);
   };
 
-  useEffect(() => {
-    fetchStaff();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const handleSubmit = async () => {
-    if (editingId) {
-      await fetch("/api/staff", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, id: editingId }),
-      });
-      setEditingId(null);
-    } else {
-      await fetch("/api/staff", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    }
-
-    setForm({ name: "", phone: "", role: "", monthlySalary: "" });
-    fetchStaff();
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      if (editingId) {
+        await fetch("/api/staff", {
+          method:"PUT", credentials:"include",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ ...form, id:editingId, monthlySalary:Number(form.monthlySalary) }),
+        });
+        setEditingId(null);
+      } else {
+        await fetch("/api/staff", {
+          method:"POST", credentials:"include",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ ...form, monthlySalary:Number(form.monthlySalary) }),
+        });
+      }
+      setForm({ name:"", phone:"", role:"", monthlySalary:"" });
+      await load();
+    } finally { setSaving(false); }
   };
 
   const deleteStaff = async (id: string) => {
+    if (!confirm("Delete this staff member?")) return;
     await fetch("/api/staff", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      method:"DELETE", credentials:"include",
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ id }),
     });
-
-    fetchStaff();
+    load();
   };
 
   const editStaff = (s: any) => {
-    setForm({
-      name: s.name,
-      phone: s.phone,
-      role: s.role,
-      monthlySalary: s.monthlySalary,
-    });
+    setForm({ name:s.name, phone:s.phone, role:s.role, monthlySalary:s.monthlySalary });
     setEditingId(s._id);
   };
 
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({ name:"", phone:"", role:"", monthlySalary:"" });
+  };
+
+  const FIELDS: [string, string, string][] = [
+    ["Name","name","text"],
+    ["Phone","phone","text"],
+    ["Role","role","text"],
+    ["Monthly Salary","monthlySalary","number"],
+  ];
+
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-        Staff List
-      </h1>
+    <div className="fade-in">
+
+      {/* Header */}
+      <div className="page-header">
+        <h1 className="page-title">Staff List</h1>
+        <span className="badge badge-blue">{staff.length} members</span>
+      </div>
 
       {/* Form */}
-      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-6 grid grid-cols-4 gap-4">
-        <input
-          placeholder="Name"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className="input"
-        />
-        <input
-          placeholder="Phone"
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          className="input"
-        />
-        <input
-          placeholder="Role"
-          value={form.role}
-          onChange={(e) => setForm({ ...form, role: e.target.value })}
-          className="input"
-        />
-        <input
-          type="number"
-          placeholder="Monthly Salary"
-          value={form.monthlySalary}
-          onChange={(e) =>
-            setForm({ ...form, monthlySalary: e.target.value })
-          }
-          className="input"
-        />
-
-        <button
-          onClick={handleSubmit}
-          className="col-span-4 btn bg-blue-600 hover:bg-blue-700 transition"
-        >
-          {editingId ? "Update Staff" : "Add Staff"}
-        </button>
+      <div className="g-card" style={{ padding:"18px 20px", marginBottom:20 }}>
+        <p className="section-label">{editingId ? "Edit Staff Member" : "Add Staff Member"}</p>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr) auto", gap:12, alignItems:"end" }}>
+          {FIELDS.map(([label, key, type]) => (
+            <div className="field" key={key}>
+              <label className="field-label">{label}</label>
+              <input className="input" type={type} placeholder={label}
+                value={(form as any)[key]}
+                onChange={e => setForm({ ...form, [key]:e.target.value })} />
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, alignSelf:"flex-end" }}>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
+              {saving ? "…" : editingId ? "Update" : "Add"}
+            </button>
+            {editingId && (
+              <button className="btn" onClick={cancelEdit}>Cancel</button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Table */}
-      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="border-b border-[var(--border)] text-[var(--text-secondary)] text-sm">
+      <div className="g-table">
+        <table>
+          <thead>
             <tr>
-              <th className="p-3">Name</th>
-              <th className="p-3">Phone</th>
-              <th className="p-3">Role</th>
-              <th className="p-3">Salary</th>
-              <th className="p-3">Advance</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Action</th>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Role</th>
+              <th>Salary</th>
+              <th>Advance</th>
+              <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {staff.map((s) => (
-              <tr key={s._id} className="border-b border-[var(--border)] hover:bg-[var(--hover)] transition">
-                <td className="p-3">{s.name}</td>
-                <td className="p-3">{s.phone}</td>
-                <td className="p-3">{s.role}</td>
-                <td className="p-3">₹ {s.monthlySalary}</td>
-                <td className="p-3">₹ {s.advanceBalance || 0}</td>
-                <td className="p-3">{s.status}</td>
-                <td className="p-3 space-x-2">
-                  <button
-                    onClick={() => editStaff(s)}
-                    className="text-blue-500 hover:underline"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => deleteStaff(s._id)}
-                    className="text-red-500 hover:underline"
-                  >
-                    Delete
-                  </button>
+            {loading ? (
+              <tr><td colSpan={7}>
+                <div style={{ display:"flex", justifyContent:"center", padding:"32px 0" }}>
+                  <div className="spinner" />
+                </div>
+              </td></tr>
+            ) : staff.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign:"center", padding:"32px 0", color:"var(--text-3)" }}>
+                No staff members yet
+              </td></tr>
+            ) : staff.map(s => (
+              <tr key={s._id}>
+                <td style={{ fontWeight:500 }}>{s.name}</td>
+                <td style={{ fontFamily:"'DM Mono',monospace", fontSize:13, color:"var(--text-2)" }}>{s.phone}</td>
+                <td><span className="badge badge-neutral">{s.role || "—"}</span></td>
+                <td style={{ fontWeight:600, fontFamily:"'DM Mono',monospace", fontSize:13 }}>
+                  ₹{Number(s.monthlySalary||0).toLocaleString("en-IN")}
+                </td>
+                <td style={{ fontFamily:"'DM Mono',monospace", fontSize:13, color:"var(--amber)" }}>
+                  ₹{Number(s.advanceBalance||0).toLocaleString("en-IN")}
+                </td>
+                <td>
+                  <span className={`badge ${s.status === "active" ? "badge-green" : "badge-neutral"}`}>
+                    {s.status || "active"}
+                  </span>
+                </td>
+                <td>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button className="btn btn-sm" onClick={() => editStaff(s)}>Edit</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => deleteStaff(s._id)}>Delete</button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
     </div>
   );
 }

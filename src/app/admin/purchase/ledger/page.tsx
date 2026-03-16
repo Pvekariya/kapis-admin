@@ -2,135 +2,116 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+const fmt = (v: number) => Math.round(v || 0).toLocaleString("en-IN");
+
 export default function PurchaseLedger() {
-  const [data, setData] = useState<any[]>([]);
-  const [search, setSearch] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [data, setData]       = useState<any[]>([]);
+  const [search, setSearch]   = useState("");
+  const [fromDate, setFrom]   = useState("");
+  const [toDate, setTo]       = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/purchase/ledger")
-      .then(res => res.json())
-      .then(setData);
+    fetch("/api/purchase/ledger", { credentials:"include" })
+      .then(r => r.json())
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false); });
   }, []);
 
   const filtered = useMemo(() => {
-    return data.filter((bill) => {
-      const matchesSearch =
-        bill.invoice?.toLowerCase().includes(search.toLowerCase()) ||
-        bill.supplier?.toLowerCase().includes(search.toLowerCase()) ||
-        bill.product?.toLowerCase().includes(search.toLowerCase());
-
-      const billDate = new Date(bill.date);
-      const matchesFrom = fromDate
-        ? billDate >= new Date(fromDate)
-        : true;
-      const matchesTo = toDate
-        ? billDate <= new Date(toDate)
-        : true;
-
-      return matchesSearch && matchesFrom && matchesTo;
+    return data.filter(b => {
+      const matchSearch =
+        b.invoice?.toLowerCase().includes(search.toLowerCase()) ||
+        b.supplier?.toLowerCase().includes(search.toLowerCase());
+      const d = new Date(b.date);
+      const matchFrom = fromDate ? d >= new Date(fromDate) : true;
+      const matchTo   = toDate   ? d <= new Date(toDate)   : true;
+      return matchSearch && matchFrom && matchTo;
     });
   }, [data, search, fromDate, toDate]);
 
-  const formatCurrency = (val: number) =>
-    Math.round(val || 0).toLocaleString("en-IN");
+  const totalSpent = filtered.reduce((s, b) => s + Number(b.total||0), 0);
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-semibold">Purchase Ledger</h2>
+    <div className="fade-in">
 
-      {/* Search & Filters */}
-      <div className="grid md:grid-cols-4 gap-3 bg-[var(--panel)] p-4 rounded-xl border border-[var(--border)]">
-        <input
-          placeholder="Search Invoice / Vendor / Product"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="input"
-        />
+      {/* Header */}
+      <div className="page-header">
+        <h1 className="page-title">Purchase Ledger</h1>
+        <span className="badge badge-red">₹{fmt(totalSpent)} total spent</span>
+      </div>
 
-        <input
-          type="date"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          className="input"
-        />
-
-        <input
-          type="date"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          className="input"
-        />
-
-        <button
-          onClick={() => {
-            setSearch("");
-            setFromDate("");
-            setToDate("");
-          }}
-          className="btn border"
-        >
+      {/* Filters */}
+      <div className="g-panel" style={{ padding:14, display:"flex", gap:10, flexWrap:"wrap", marginBottom:20 }}>
+        <input className="input" placeholder="Search invoice / vendor…"
+          value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth:240 }} />
+        <div className="field">
+          <label className="field-label">From</label>
+          <input type="date" className="input" value={fromDate} onChange={e => setFrom(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="field-label">To</label>
+          <input type="date" className="input" value={toDate} onChange={e => setTo(e.target.value)} />
+        </div>
+        <button className="btn" onClick={() => { setSearch(""); setFrom(""); setTo(""); }}
+          style={{ alignSelf:"flex-end" }}>
           Reset
         </button>
       </div>
 
-      {/* Ledger Table */}
-      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-black/20">
+      {/* Table */}
+      <div className="g-table">
+        <table>
+          <thead>
             <tr>
-              <th className="p-3 text-left">Invoice</th>
-              <th className="p-3 text-left">Vendor</th>
-              <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-left">Qty</th>
-              <th className="p-3 text-left">Price / pcs</th>
-              <th className="p-3 text-left">Total</th>
-              <th className="p-3 text-left">Paid By</th>
-              <th className="p-3 text-left">Date</th>
+              <th>Invoice</th>
+              <th>Vendor</th>
+              <th>Products</th>
+              <th>Qty</th>
+              <th>Total</th>
+              <th>Payment</th>
+              <th>Date</th>
             </tr>
           </thead>
-
           <tbody>
-            {filtered.map((bill) => (
-              <tr key={bill._id} className="border-b border-[var(--border)]">
-                <td className="p-3 font-medium">{bill.invoice}</td>
-                <td className="p-3">{bill.supplier}</td>
-                <td className="p-3">
-                  {bill.items && bill.items.length > 0
-                    ? bill.items.map((i: any) => i.name).join(", ")
-                    : bill.product || "-"}
+            {loading ? (
+              <tr><td colSpan={7}>
+                <div style={{ display:"flex", justifyContent:"center", padding:"32px 0" }}>
+                  <div className="spinner" />
+                </div>
+              </td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign:"center", padding:"32px 0", color:"var(--text-3)" }}>
+                No purchase records found
+              </td></tr>
+            ) : filtered.map(b => (
+              <tr key={b._id}>
+                <td>
+                  <span style={{ fontWeight:600, fontFamily:"'DM Mono',monospace", fontSize:13 }}>
+                    {b.invoice}
+                  </span>
                 </td>
-                <td className="p-3">
-                  {bill.items && bill.items.length > 0
-                    ? bill.items.map((i: any) => i.qty).join(", ")
-                    : bill.quantity || "-"}
+                <td style={{ fontWeight:500 }}>{b.supplier}</td>
+                <td style={{ color:"var(--text-2)", fontSize:12 }}>
+                  {b.items?.length > 0 ? b.items.map((i:any) => i.name).join(", ") : b.product || "—"}
                 </td>
-                <td className="p-3">
-                  {bill.items && bill.items.length > 0
-                    ? "Multiple"
-                    : `₹${formatCurrency(bill.pricePerUnit)}`}
+                <td style={{ fontSize:12 }}>
+                  {b.items?.length > 0 ? b.items.map((i:any) => i.qty).join(", ") : b.quantity || "—"}
                 </td>
-                <td className="p-3">
-                  ₹{formatCurrency(bill.total)}
+                <td>
+                  <span style={{ fontWeight:700, color:"var(--red)", fontFamily:"'DM Mono',monospace" }}>
+                    ₹{fmt(b.total)}
+                  </span>
                 </td>
-                <td className="p-3 capitalize">{bill.paymentMode}</td>
-                <td className="p-3">
-                  {new Date(bill.date).toLocaleDateString()}
+                <td><span className="badge badge-neutral">{b.paymentMode}</span></td>
+                <td style={{ fontSize:12, color:"var(--text-2)" }}>
+                  {new Date(b.date).toLocaleDateString()}
                 </td>
               </tr>
             ))}
-
-            {!filtered.length && (
-              <tr>
-                <td colSpan={8} className="p-4 text-center opacity-60">
-                  No Purchase Records Found
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
+
     </div>
   );
 }

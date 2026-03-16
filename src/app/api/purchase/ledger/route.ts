@@ -1,23 +1,17 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { guardAuth } from "@/lib/auth";
 
 export async function GET() {
-  try {
-    const db = await getDb();
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
 
-    // 🔥 IMPORTANT — use SAME collection name as POST route
-    const data = await db
-      .collection("purchase")
-      .find({})
-      .sort({ date: -1 })
-      .toArray();
+  const db = await getDb();
+  const data = await db
+    .collection("purchase")
+    .find({})
+    .sort({ date: -1 })
+    .toArray();
 
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Purchase Ledger Error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch purchase ledger" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(data);
 }

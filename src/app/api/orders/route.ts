@@ -1,39 +1,40 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { guardAuth } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 
-/*
-STATUS FLOW
-pending → ready → done
-
-ready/done = stock adjustment happens
-done = remove order
-*/
+const PatchSchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(["pending", "ready", "done"]),
+});
 
 export async function GET() {
-  const db = await getDb();
-  const raw = await db.collection("orders").find().toArray();
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
 
-  const orders = raw.map((o: any) => ({
-    ...o,
-    color: o.color || "",
-  }));
-  return NextResponse.json(orders);
+  const db = await getDb();
+  const orders = await db.collection("orders").find().toArray();
+  return NextResponse.json(orders.map((o: any) => ({ ...o, color: o.color ?? "" })));
 }
 
 export async function POST(req: Request) {
-  const db = await getDb();
-  const body = await req.json();
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
 
-  // buyer comes from bill OR inventory
+  const body = await req.json();
+  if (!body.productId || !body.qty)
+    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+
+  const db = await getDb();
   await db.collection("orders").insertOne({
-    buyer: body.buyer || "inventory",
+    buyer: body.buyer ?? "inventory",
     productId: new ObjectId(body.productId),
-    name: body.name,
-    color: body.color || "",
+    name: String(body.name ?? ""),
+    color: String(body.color ?? ""),
     qty: Number(body.qty),
     status: "pending",
-    priority: body.priority || "normal",
+    priority: body.priority ?? "normal",
     createdAt: new Date(),
   });
 
@@ -41,86 +42,65 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const db = await getDb();
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
+
   const body = await req.json();
+  const parsed = PatchSchema.safeParse(body);
+  if (!parsed.success)
+    return NextResponse.json({ error: "Invalid data" }, { status: 400 });
 
-  const order = await db.collection("orders").findOne({
-    _id: new ObjectId(body.id),
-  });
+  const { id, status } = parsed.data;
+  const db = await getDb();
 
-  if (!order) {
-    return NextResponse.json({ error: "Not found" });
-  }
+  const order = await db
+    .collection("orders")
+    .findOne({ _id: new ObjectId(id) });
+  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const product = await db.collection("inventory").findOne({
-    _id: new ObjectId(order.productId),
-  });
+  const product = await db
+    .collection("inventory")
+    .findOne({ _id: new ObjectId(order.productId) });
+  if (!product)
+    return NextResponse.json({ error: "Product missing" }, { status: 404 });
 
-  if (!product) {
-    return NextResponse.json({ error: "Product missing" });
-  }
+  if (status === "ready" || status === "done") {
+    const qty = Number(order.qty);
+    const stock = Number(product.stock ?? 0);
 
-  const currentStock = product.stock;
-  const orderQty = order.qty;
-
-  // 🔥 when marking READY or DONE
-  if (body.status === "ready" || body.status === "done") {
-
-    // deduct required
-    if (currentStock >= orderQty) {
-      await db.collection("inventory").updateOne(
-        { _id: product._id },
-        { $inc: { stock: -orderQty } }
-      );
+    if (stock >= qty) {
+      await db
+        .collection("inventory")
+        .updateOne({ _id: product._id }, { $inc: { stock: -qty } });
     } else {
-      // partial
-      const remaining = orderQty - currentStock;
-
-      await db.collection("inventory").updateOne(
-        { _id: product._id },
-        { $set: { stock: 0 } }
-      );
-
-      // reinsert remaining as new order
-      await db.collection("orders").insertOne({
-        buyer: order.buyer,
-        productId: order.productId,
-        name: order.name,
-        color: order.color || "",
-        qty: remaining,
-        status: "pending",
-        priority: order.priority,
-        createdAt: new Date(),
-      });
+      await db
+        .collection("inventory")
+        .updateOne({ _id: product._id }, { $set: { stock: 0 } });
+      if (stock < qty) {
+        await db.collection("orders").insertOne({
+          buyer: order.buyer, productId: order.productId,
+          name: order.name, color: order.color ?? "",
+          qty: qty - stock, status: "pending",
+          priority: order.priority, createdAt: new Date(),
+        });
+      }
     }
   }
 
-  // DONE = create income entry + remove order
-  if (body.status === "done") {
-
-    // 🔥 create daybook income entry
+  if (status === "done") {
     await db.collection("daybook").insertOne({
-      type: "income",
-      category: "sale",
+      type: "income", category: "sale",
       referenceId: order._id,
       description: `Sale - ${order.name}`,
-      amount: Number(order.qty) * Number(product.price || 0),
-      paymentMode: "cash", // adjust later if you add payment mode in orders
-      date: new Date(),
-      createdAt: new Date(),
+      amount: Number(order.qty) * Number(product.price ?? 0),
+      paymentMode: "cash",
+      date: new Date(), createdAt: new Date(),
     });
-
-    await db.collection("orders").deleteOne({
-      _id: order._id,
-    });
-
+    await db.collection("orders").deleteOne({ _id: order._id });
   } else {
-
-    await db.collection("orders").updateOne(
-      { _id: order._id },
-      { $set: { status: body.status } }
-    );
-
+    await db
+      .collection("orders")
+      .updateOne({ _id: order._id }, { $set: { status } });
   }
 
   return NextResponse.json({ success: true });

@@ -1,53 +1,36 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { guardAuth } from "@/lib/auth";
+
+const MONTH_CODES: Record<number, string> = {
+  0: "A", 1: "B", 2: "C", 3: "D",
+  4: "E", 5: "F", 6: "G", 7: "H",
+  8: "I", 9: "J", 10: "K", 11: "L",
+};
 
 export async function GET(request: Request) {
-  const db = await getDb();
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
 
   const { searchParams } = new URL(request.url);
   const customDate = searchParams.get("customDate");
-
-  const monthCodes: Record<number, string> = {
-    0: "A",  // Jan
-    1: "B",  // Feb
-    2: "C",  // Mar
-    3: "D",  // Apr
-    4: "E",  // May
-    5: "F",  // Jun
-    6: "G",  // Jul
-    7: "H",  // Aug
-    8: "I",  // Sept
-    9: "J",  // Oct
-    10: "K", // Nov
-    11: "L", // Dec
-  };
 
   const baseDate = customDate
     ? new Date(customDate + "T00:00:00")
     : new Date();
 
-  const currentMonth = baseDate.getMonth();
-  const prefix = monthCodes[currentMonth];
+  const prefix = MONTH_CODES[baseDate.getMonth()];
+  const db = await getDb();
 
-  // Find last invoice of this month only
-  const last = await db
-    .collection("sales")
-    .find({ invoice: { $regex: `^${prefix}` } })
-    .sort({ invoice: -1 })
-    .limit(1)
-    .toArray();
+  // Atomic increment counter — prevents race condition duplicate invoices
+  const counter = await db.collection("invoiceCounters").findOneAndUpdate(
+    { id: prefix },
+    { $inc: { seq: 1 } },
+    { upsert: true, returnDocument: "after" }
+  );
 
-  let nextNumber = 1;
-
-  if (last.length > 0) {
-    const lastInvoice = last[0].invoice; // e.g. A005
-    const numericPart = parseInt(lastInvoice.substring(1));
-    if (!isNaN(numericPart)) {
-      nextNumber = numericPart + 1;
-    }
-  }
-
-  const formatted = `${prefix}${String(nextNumber).padStart(3, "0")}`;
+  const seq = counter?.seq ?? 1;
+  const formatted = `${prefix}${String(seq).padStart(3, "0")}`;
 
   return NextResponse.json({ invoice: formatted });
 }

@@ -1,22 +1,26 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { requireAuth } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
-export async function GET(req: Request) {
-  const cookie = req.headers.get("cookie") || "";
-  const match = cookie.match(/session=([^;]+)/);
+export async function GET() {
+  try {
+    const payload = await requireAuth();
 
-  if (!match) return NextResponse.json(null);
+    const db = await getDb();
+    const user = await db.collection("users").findOne({
+      _id: new ObjectId(payload.userId),
+    });
 
-  const db = await getDb();
-  const user = await db.collection("users").findOne({
-    _id: new ObjectId(match[1]),
-  });
+    if (!user) return NextResponse.json(null);
 
-  if (!user) return NextResponse.json(null);
-
-  return NextResponse.json({
-    email: user.email,
-    avatar: user.avatar || "",
-  });
+    // Never return password
+    return NextResponse.json({
+      email: user.email,
+      name: user.name || "",
+      avatar: user.avatar || "",
+    });
+  } catch {
+    return NextResponse.json(null);
+  }
 }
