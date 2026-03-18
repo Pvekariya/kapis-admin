@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
+/* ── Icons ──────────────────────────────────────────── */
 const SunIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="5"/>
@@ -37,40 +38,48 @@ const EditIcon = () => (
   </svg>
 );
 
-function getBreadcrumb(p: string) {
-  const map: Record<string, string> = {
-    "/admin": "Dashboard", "/admin/leads": "Leads",
-    "/admin/inventory/raw": "Raw Materials", "/admin/inventory/finished": "Finished Products",
-    "/admin/staff": "Staff List", "/admin/staff/attendance": "Attendance",
-    "/admin/staff/salary": "Salary", "/admin/staff/consumption": "Production",
-    "/admin/daybook": "Daybook", "/admin/bill": "Billing",
-    "/admin/sales": "Sales Ledger", "/admin/purchase": "Purchase",
-    "/admin/purchase/ledger": "Purchase Ledger",
-  };
-  return map[p] || "Dashboard";
-}
+/* ── Page title map ──────────────────────────────────── */
+const PAGE_TITLES: Record<string, { title: string; icon: string }> = {
+  "/admin":                  { title: "Dashboard",       icon: "⬛" },
+  "/admin/leads":            { title: "Leads",           icon: "👥" },
+  "/admin/inventory/raw":    { title: "Raw Materials",   icon: "📦" },
+  "/admin/inventory/finished":{ title: "Finished Products", icon: "✅" },
+  "/admin/staff":            { title: "Staff",           icon: "🧑‍💼" },
+  "/admin/staff/attendance": { title: "Attendance",      icon: "📋" },
+  "/admin/staff/salary":     { title: "Salary",          icon: "💰" },
+  "/admin/staff/consumption":{ title: "Production",      icon: "🏭" },
+  "/admin/daybook":          { title: "Daybook",         icon: "📒" },
+  "/admin/bill":             { title: "Billing",         icon: "🧾" },
+  "/admin/sales":            { title: "Sales Ledger",    icon: "📊" },
+  "/admin/purchase":         { title: "Purchase",        icon: "🛒" },
+  "/admin/purchase/ledger":  { title: "Purchase Ledger", icon: "📑" },
+  "/admin/bom":              { title: "Bill of Materials", icon: "⚙️" },
+};
 
 export default function Header() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const profileRef = useRef<HTMLDivElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
+  const router      = useRouter();
+  const pathname    = usePathname();
+  const profileRef  = useRef<HTMLDivElement>(null);
+  const notifRef    = useRef<HTMLDivElement>(null);
 
-  const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [user, setUser] = useState({ email: "", name: "", avatar: "" });
-  const [editForm, setEditForm] = useState({ email: "", name: "", avatar: "" });
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [mounted,        setMounted]       = useState(false);
+  const [theme,          setTheme]         = useState<"dark"|"light">("dark");
+  const [profileOpen,    setProfileOpen]   = useState(false);
+  const [notifOpen,      setNotifOpen]     = useState(false);
+  const [showEditModal,  setShowEditModal] = useState(false);
+  const [user,           setUser]          = useState({ email:"", name:"", avatar:"" });
+  const [editForm,       setEditForm]      = useState({ email:"", name:"", avatar:"" });
+  const [notifications,  setNotifications] = useState<any[]>([]);
+  const [saving,         setSaving]        = useState(false);
 
+  const pageInfo = PAGE_TITLES[pathname] ?? { title: "Dashboard", icon: "⬛" };
+
+  /* Theme */
   useEffect(() => {
-    const saved = localStorage.getItem("erp-theme") as "dark" | "light" | null;
-    const t = saved || "dark";
+    const saved = localStorage.getItem("erp-theme") as "dark"|"light"|null;
+    const t     = saved || "dark";
     setTheme(t);
-    document.documentElement.classList.remove("dark", "light");
+    document.documentElement.classList.remove("dark","light");
     document.documentElement.classList.add(t);
     setMounted(true);
   }, []);
@@ -78,22 +87,28 @@ export default function Header() {
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    document.documentElement.classList.remove("dark", "light");
+    document.documentElement.classList.remove("dark","light");
     document.documentElement.classList.add(next);
     localStorage.setItem("erp-theme", next);
   };
 
+  /* Data */
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then(r => r.json()).then(d => { if (d) { setUser(d); setEditForm(d); } }).catch(() => {});
-    fetch("/api/notifications", { credentials: "include" })
-      .then(r => r.json()).then(d => Array.isArray(d) && setNotifications(d)).catch(() => {});
+    fetch("/api/auth/me", { credentials:"include" })
+      .then(r => r.json())
+      .then(d => { if (d) { setUser(d); setEditForm(d); } })
+      .catch(() => {});
+    fetch("/api/notifications", { credentials:"include" })
+      .then(r => r.json())
+      .then(d => Array.isArray(d) && setNotifications(d))
+      .catch(() => {});
   }, []);
 
+  /* Close on outside click */
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+      if (notifRef.current   && !notifRef.current.contains(e.target as Node))   setNotifOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -101,64 +116,106 @@ export default function Header() {
 
   if (!mounted) return null;
 
-  /* shared dropdown style */
+  /* ── Dropdown base style ── */
   const dropStyle: React.CSSProperties = {
-    position: "absolute", top: "calc(100% + 8px)", right: 0,
+    position: "absolute", top: "calc(100% + 10px)", right: 0,
     background: "var(--glass-modal)",
-    backdropFilter: "blur(28px) saturate(200%)",
-    WebkitBackdropFilter: "blur(28px) saturate(200%)",
+    backdropFilter: "blur(32px) saturate(200%)",
+    WebkitBackdropFilter: "blur(32px) saturate(200%)",
     border: "1px solid var(--border-2)",
     borderRadius: 14,
-    boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)",
     zIndex: 300,
     overflow: "hidden",
     animation: "slideUp 0.15s ease",
   };
 
-  const iconBtnStyle: React.CSSProperties = {
+  const iconBtn: React.CSSProperties = {
     width: 34, height: 34, borderRadius: 9,
     border: "1px solid var(--border-2)",
     background: "var(--glass-2)",
     color: "var(--text-2)",
     display: "flex", alignItems: "center", justifyContent: "center",
     cursor: "pointer", transition: "all 0.15s", flexShrink: 0,
+    outline: "none",
+  };
+
+  const R: React.CSSProperties = {
+    background: "none", border: "none", padding: 0,
+    color: "inherit", font: "inherit", cursor: "pointer", outline: "none",
   };
 
   return (
     <>
+      {/* ── HEADER ──────────────────────────────────────── */}
       <header style={{
-        height: 56,
+        height: 60,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 24px",
-        borderBottom: "1px solid var(--border)",
-        background: "var(--glass-2)",
-        backdropFilter: "blur(20px) saturate(160%)",
-        WebkitBackdropFilter: "blur(20px) saturate(160%)",
         position: "sticky", top: 0, zIndex: 30, flexShrink: 0,
+        /* Hero glass effect */
+        background: "linear-gradient(135deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.025) 100%)",
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        /* Shimmer bottom border */
+        boxShadow: "0 1px 0 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.18)",
       }}>
 
-        {/* Breadcrumb */}
-        <div>
-          <p style={{ fontSize: 10.5, color: "var(--text-3)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 1 }}>
-            PV ERP Solutions
-          </p>
-          <p style={{ fontSize: 14.5, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em", lineHeight: 1 }}>
-            {getBreadcrumb(pathname)}
-          </p>
+        {/* Animated shimmer line along the top */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 1,
+          background: "linear-gradient(90deg, transparent 0%, rgba(59,130,246,0.6) 30%, rgba(168,85,247,0.5) 60%, transparent 100%)",
+          animation: "headerShimmer 4s ease-in-out infinite",
+        }} />
+
+        {/* Subtle glow orb behind title */}
+        <div style={{
+          position: "absolute", left: 16, top: "50%",
+          transform: "translateY(-50%)",
+          width: 200, height: 40,
+          background: "radial-gradient(ellipse at left, rgba(59,130,246,0.08) 0%, transparent 70%)",
+          pointerEvents: "none",
+        }} />
+
+        {/* ── Left: Page title ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 1 }}>
+          <h1 style={{
+            fontSize: 20,
+            fontWeight: 700,
+            color: "var(--text-1)",
+            letterSpacing: "-0.025em",
+            lineHeight: 1,
+            margin: 0,
+          }}>
+            {pageInfo.title}
+          </h1>
+          {/* Accent underline */}
+          <div style={{
+            position: "absolute",
+            bottom: -20,
+            left: 0,
+            width: "100%",
+            height: 2,
+            background: "linear-gradient(90deg, rgba(59,130,246,0.6), transparent)",
+            borderRadius: 2,
+          }} />
         </div>
 
-        {/* Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {/* ── Right: Actions ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", zIndex: 1 }}>
 
           {/* Theme */}
-          <button style={iconBtnStyle} onClick={toggleTheme} title="Toggle theme">
+          <button style={iconBtn} onClick={toggleTheme} title="Toggle theme">
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </button>
 
           {/* Notifications */}
           <div style={{ position: "relative" }} ref={notifRef}>
-            <button style={{ ...iconBtnStyle, position: "relative" }}
-              onClick={() => { setNotifOpen(o => !o); setProfileOpen(false); }}>
+            <button
+              style={{ ...iconBtn, position: "relative" }}
+              onClick={() => { setNotifOpen(o => !o); setProfileOpen(false); }}
+            >
               <BellIcon />
               {notifications.length > 0 && (
                 <span style={{
@@ -171,24 +228,26 @@ export default function Header() {
 
             {notifOpen && (
               <div style={{ ...dropStyle, width: 300 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 10px", borderBottom: "1px solid var(--border)" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-1)" }}>Notifications</span>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px 10px", borderBottom:"1px solid var(--border)" }}>
+                  <span style={{ fontSize:12.5, fontWeight:600, color:"var(--text-1)" }}>Notifications</span>
                   {notifications.length > 0 && (
                     <button onClick={async () => {
-                      await fetch("/api/notifications", { method: "DELETE", credentials: "include" });
+                      await fetch("/api/notifications", { method:"DELETE", credentials:"include" });
                       setNotifications([]);
-                    }} style={{ fontSize: 11, color: "var(--text-3)", background: "none", border: "none", cursor: "pointer" }}>
+                    }} style={{ ...R, fontSize:11, color:"var(--text-3)" }}>
                       Clear all
                     </button>
                   )}
                 </div>
-                <div style={{ maxHeight: 280, overflowY: "auto" }}>
+                <div style={{ maxHeight:280, overflowY:"auto" }}>
                   {notifications.length === 0 ? (
-                    <p style={{ padding: "20px 14px", textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>All caught up</p>
-                  ) : notifications.slice(0, 20).map((n: any) => (
-                    <div key={n._id} style={{ padding: "9px 14px", borderBottom: "1px solid var(--border)" }}>
-                      <p style={{ fontSize: 12.5, color: "var(--text-1)", marginBottom: 2 }}>{n.message}</p>
-                      <p style={{ fontSize: 10.5, color: "var(--text-3)" }}>{new Date(n.createdAt).toLocaleString()}</p>
+                    <p style={{ padding:"20px 14px", textAlign:"center", fontSize:12, color:"var(--text-3)" }}>
+                      All caught up ✓
+                    </p>
+                  ) : notifications.slice(0,20).map((n: any) => (
+                    <div key={n._id} style={{ padding:"9px 14px", borderBottom:"1px solid var(--border)" }}>
+                      <p style={{ fontSize:12.5, color:"var(--text-1)", marginBottom:2 }}>{n.message}</p>
+                      <p style={{ fontSize:10.5, color:"var(--text-3)" }}>{new Date(n.createdAt).toLocaleString()}</p>
                     </div>
                   ))}
                 </div>
@@ -197,42 +256,44 @@ export default function Header() {
           </div>
 
           {/* Profile */}
-          <div style={{ position: "relative" }} ref={profileRef}>
-            <button onClick={() => { setProfileOpen(o => !o); setNotifOpen(false); }}
-              style={{ width: 34, height: 34, borderRadius: "50%", border: "1.5px solid var(--border-2)", overflow: "hidden", cursor: "pointer", background: "var(--glass-2)", padding: 0 }}>
+          <div style={{ position:"relative" }} ref={profileRef}>
+            <button
+              onClick={() => { setProfileOpen(o => !o); setNotifOpen(false); }}
+              style={{ width:34, height:34, borderRadius:"50%", border:"1.5px solid var(--border-2)", overflow:"hidden", cursor:"pointer", background:"var(--glass-2)", padding:0, outline:"none" }}
+            >
               {user.avatar ? (
-                <img src={user.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <img src={user.avatar} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
               ) : (
-                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#3b82f6,#6366f1)", color: "#fff", fontSize: 12, fontWeight: 600 }}>
+                <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(135deg,#3b82f6,#6366f1)", color:"#fff", fontSize:12, fontWeight:600 }}>
                   {(user.name || user.email || "A")[0].toUpperCase()}
                 </div>
               )}
             </button>
 
             {profileOpen && (
-              <div style={{ ...dropStyle, width: 220 }}>
-                <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg,#3b82f6,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 600 }}>
-                    {user.avatar ? <img src={user.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (user.name || user.email || "A")[0].toUpperCase()}
+              <div style={{ ...dropStyle, width:220 }}>
+                <div style={{ padding:"12px 14px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:34, height:34, borderRadius:"50%", overflow:"hidden", flexShrink:0, background:"linear-gradient(135deg,#3b82f6,#6366f1)", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:12, fontWeight:600 }}>
+                    {user.avatar
+                      ? <img src={user.avatar} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                      : (user.name || user.email || "A")[0].toUpperCase()
+                    }
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name || "Admin"}</p>
-                    <p style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
+                  <div style={{ minWidth:0 }}>
+                    <p style={{ fontSize:13, fontWeight:600, color:"var(--text-1)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name || "Admin"}</p>
+                    <p style={{ fontSize:11, color:"var(--text-3)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.email}</p>
                   </div>
                 </div>
-                <div style={{ padding: 6 }}>
+                <div style={{ padding:6 }}>
                   {[
-                    { label: "Edit profile", icon: <EditIcon />, onClick: () => { setProfileOpen(false); setShowEditModal(true); }, color: "var(--text-2)" },
-                    { label: "Sign out", icon: <LogOutIcon />, onClick: async () => { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); router.push("/login"); }, color: "var(--red)" },
-                  ].map((a) => (
-                    <button key={a.label} onClick={a.onClick} style={{
-                      width: "100%", display: "flex", alignItems: "center", gap: 9,
-                      padding: "8px 10px", borderRadius: 8,
-                      background: "none", border: "none", color: a.color,
-                      fontSize: 13, cursor: "pointer", transition: "background 0.12s", textAlign: "left",
-                    }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "var(--glass-hover)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                    { label:"Edit profile", icon:<EditIcon/>, onClick:()=>{ setProfileOpen(false); setShowEditModal(true); }, color:"var(--text-2)" },
+                    { label:"Sign out",     icon:<LogOutIcon/>, onClick:async()=>{ await fetch("/api/auth/logout",{method:"POST",credentials:"include"}); router.push("/login"); }, color:"var(--red)" },
+                  ].map(a => (
+                    <button key={a.label} onClick={a.onClick}
+                      style={{ width:"100%", display:"flex", alignItems:"center", gap:9, padding:"8px 10px", borderRadius:8, background:"none", border:"none", color:a.color, fontSize:13, cursor:"pointer", transition:"background 0.12s", textAlign:"left", outline:"none" }}
+                      onMouseEnter={e=>(e.currentTarget.style.background="var(--glass-hover)")}
+                      onMouseLeave={e=>(e.currentTarget.style.background="none")}
+                    >
                       {a.icon}{a.label}
                     </button>
                   ))}
@@ -241,54 +302,66 @@ export default function Header() {
             )}
           </div>
         </div>
+
+        {/* keyframes injected here */}
+        <style>{`
+          @keyframes headerShimmer {
+            0%   { transform: translateX(-100%); opacity: 0; }
+            20%  { opacity: 1; }
+            80%  { opacity: 1; }
+            100% { transform: translateX(100%); opacity: 0; }
+          }
+        `}</style>
       </header>
 
-      {/* Edit Profile Modal */}
+      {/* ── Edit Profile Modal ─────────────────────────── */}
       {showEditModal && (
         <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: 400 }}>
+          <div className="modal-box" style={{ maxWidth:400 }}>
             <div className="modal-header">
               <h3 className="modal-title">Edit Profile</h3>
-              <button className="btn btn-icon btn-sm" onClick={() => setShowEditModal(false)}>✕</button>
+              <button className="btn btn-icon btn-sm" onClick={()=>setShowEditModal(false)}>✕</button>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-              <div style={{ width: 50, height: 50, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg,#3b82f6,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid var(--border-2)" }}>
-                {editForm.avatar ? <img src={editForm.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>{(editForm.name || editForm.email || "A")[0].toUpperCase()}</span>}
+            <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
+              <div style={{ width:50, height:50, borderRadius:"50%", overflow:"hidden", flexShrink:0, background:"linear-gradient(135deg,#3b82f6,#6366f1)", display:"flex", alignItems:"center", justifyContent:"center", border:"2px solid var(--border-2)" }}>
+                {editForm.avatar
+                  ? <img src={editForm.avatar} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                  : <span style={{ color:"#fff", fontSize:16, fontWeight:600 }}>{(editForm.name||editForm.email||"A")[0].toUpperCase()}</span>
+                }
               </div>
-              <label style={{ fontSize: 12, color: "var(--accent)", cursor: "pointer", background: "var(--blue-dim)", border: "1px solid var(--blue-border)", borderRadius: 8, padding: "6px 12px" }}>
+              <label style={{ fontSize:12, color:"var(--accent)", cursor:"pointer", background:"var(--blue-dim)", border:"1px solid var(--blue-border)", borderRadius:8, padding:"6px 12px" }}>
                 Upload photo
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
-                  const f = e.target.files?.[0]; if (!f) return;
-                  const r = new FileReader(); r.onload = () => setEditForm(p => ({ ...p, avatar: r.result as string }));
-                  r.readAsDataURL(f);
-                }} />
+                <input type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{
+                  const f=e.target.files?.[0]; if(!f) return;
+                  const r=new FileReader(); r.onload=()=>setEditForm(p=>({...p,avatar:r.result as string})); r.readAsDataURL(f);
+                }}/>
               </label>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {[["Name", "name", "text"], ["Email", "email", "email"]].map(([lbl, key, type]) => (
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {[["Name","name","text"],["Email","email","email"]].map(([lbl,key,type])=>(
                 <div className="field" key={key}>
                   <label className="field-label">{lbl}</label>
                   <input className="input" type={type} value={(editForm as any)[key]}
-                    onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} />
+                    onChange={e=>setEditForm(f=>({...f,[key]:e.target.value}))}/>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-              <button className="btn btn-primary w-full" style={{ flex: 1 }} disabled={saving}
-                onClick={async () => {
+            <div style={{ display:"flex", gap:10, marginTop:20 }}>
+              <button className="btn btn-primary" style={{ flex:1 }} disabled={saving}
+                onClick={async()=>{
                   setSaving(true);
                   try {
-                    const res = await fetch("/api/auth/update", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editForm) });
-                    const d = await res.json();
-                    if (d.success) { setUser(editForm); setShowEditModal(false); }
+                    const res = await fetch("/api/auth/update",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(editForm)});
+                    const d   = await res.json();
+                    if(d.success){ setUser(editForm); setShowEditModal(false); }
                   } finally { setSaving(false); }
                 }}>
-                {saving ? "Saving…" : "Save changes"}
+                {saving?"Saving…":"Save changes"}
               </button>
-              <button className="btn" style={{ flex: 1 }} onClick={() => setShowEditModal(false)}>Cancel</button>
+              <button className="btn" style={{ flex:1 }} onClick={()=>setShowEditModal(false)}>Cancel</button>
             </div>
           </div>
         </div>
