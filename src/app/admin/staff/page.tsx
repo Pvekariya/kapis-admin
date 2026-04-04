@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 export default function StaffPage() {
-  const [staff, setStaff]       = useState<any[]>([]);
-  const [editingId, setEditingId] = useState<string|null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [form, setForm]         = useState({ name:"", phone:"", role:"", monthlySalary:"" });
+  const [staff, setStaff]         = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [form, setForm] = useState({ name: "", phone: "", role: "", monthlySalary: "" });
 
   const load = async () => {
-    const res  = await fetch("/api/staff", { credentials:"include" });
+    const res  = await fetch("/api/staff", { credentials: "include" });
     const data = await res.json();
     setStaff(Array.isArray(data) ? data : []);
     setLoading(false);
@@ -24,48 +26,69 @@ export default function StaffPage() {
     try {
       if (editingId) {
         await fetch("/api/staff", {
-          method:"PUT", credentials:"include",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ ...form, id:editingId, monthlySalary:Number(form.monthlySalary) }),
+          method: "PUT", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...form, id: editingId, monthlySalary: Number(form.monthlySalary) }),
         });
         setEditingId(null);
       } else {
         await fetch("/api/staff", {
-          method:"POST", credentials:"include",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ ...form, monthlySalary:Number(form.monthlySalary) }),
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...form, monthlySalary: Number(form.monthlySalary) }),
         });
       }
-      setForm({ name:"", phone:"", role:"", monthlySalary:"" });
+      setForm({ name: "", phone: "", role: "", monthlySalary: "" });
       await load();
     } finally { setSaving(false); }
   };
 
-  const deleteStaff = async (id: string) => {
-    if (!confirm("Delete this staff member?")) return;
-    await fetch("/api/staff", {
-      method:"DELETE", credentials:"include",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ id }),
+  // ✅ FIX: wrap confirm + fetch in startTransition to avoid blocking INP
+  //         also update UI optimistically before awaiting the network call
+  const deleteStaff = (id: string, name: string) => {
+    startTransition(async () => {
+      const yes = window.confirm(`Delete "${name}"?`);
+      if (!yes) return;
+
+      // Optimistic UI — remove from list immediately
+      setStaff(prev => prev.filter(s => s._id !== id));
+      setDeletingId(id);
+
+      try {
+        const res = await fetch("/api/staff", {
+          method: "DELETE", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          // Rollback if server rejected
+          await load();
+        }
+      } catch {
+        // Network error — rollback
+        await load();
+      } finally {
+        setDeletingId(null);
+      }
     });
-    load();
   };
 
   const editStaff = (s: any) => {
-    setForm({ name:s.name, phone:s.phone, role:s.role, monthlySalary:s.monthlySalary });
+    setForm({ name: s.name, phone: s.phone, role: s.role, monthlySalary: s.monthlySalary });
     setEditingId(s._id);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setForm({ name:"", phone:"", role:"", monthlySalary:"" });
+    setForm({ name: "", phone: "", role: "", monthlySalary: "" });
   };
 
   const FIELDS: [string, string, string][] = [
-    ["Name","name","text"],
-    ["Phone","phone","text"],
-    ["Role","role","text"],
-    ["Monthly Salary","monthlySalary","number"],
+    ["Name", "name", "text"],
+    ["Phone", "phone", "text"],
+    ["Role", "role", "text"],
+    ["Monthly Salary", "monthlySalary", "number"],
   ];
 
   return (
@@ -78,18 +101,18 @@ export default function StaffPage() {
       </div>
 
       {/* Form */}
-      <div className="g-card" style={{ padding:"18px 20px", marginBottom:20 }}>
+      <div className="g-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
         <p className="section-label">{editingId ? "Edit Staff Member" : "Add Staff Member"}</p>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr) auto", gap:12, alignItems:"end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr) auto", gap: 12, alignItems: "end" }}>
           {FIELDS.map(([label, key, type]) => (
             <div className="field" key={key}>
               <label className="field-label">{label}</label>
               <input className="input" type={type} placeholder={label}
                 value={(form as any)[key]}
-                onChange={e => setForm({ ...form, [key]:e.target.value })} />
+                onChange={e => setForm({ ...form, [key]: e.target.value })} />
             </div>
           ))}
-          <div style={{ display:"flex", gap:8, alignSelf:"flex-end" }}>
+          <div style={{ display: "flex", gap: 8, alignSelf: "flex-end" }}>
             <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
               {saving ? "…" : editingId ? "Update" : "Add"}
             </button>
@@ -105,50 +128,62 @@ export default function StaffPage() {
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Phone</th>
-              <th>Role</th>
-              <th>Salary</th>
-              <th>Advance</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th>Name</th><th>Phone</th><th>Role</th>
+              <th>Salary</th><th>Advance</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan={7}>
-                <div style={{ display:"flex", justifyContent:"center", padding:"32px 0" }}>
+                <div style={{ display: "flex", justifyContent: "center", padding: "32px 0" }}>
                   <div className="spinner" />
                 </div>
               </td></tr>
             ) : staff.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign:"center", padding:"32px 0", color:"var(--text-3)" }}>
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: "32px 0", color: "var(--text-3)" }}>
                 No staff members yet
               </td></tr>
-            ) : staff.map(s => (
-              <tr key={s._id}>
-                <td style={{ fontWeight:500 }}>{s.name}</td>
-                <td style={{ fontFamily:"'DM Mono',monospace", fontSize:13, color:"var(--text-2)" }}>{s.phone}</td>
-                <td><span className="badge badge-neutral">{s.role || "—"}</span></td>
-                <td style={{ fontWeight:600, fontFamily:"'DM Mono',monospace", fontSize:13 }}>
-                  ₹{Number(s.monthlySalary||0).toLocaleString("en-IN")}
-                </td>
-                <td style={{ fontFamily:"'DM Mono',monospace", fontSize:13, color:"var(--amber)" }}>
-                  ₹{Number(s.advanceBalance||0).toLocaleString("en-IN")}
-                </td>
-                <td>
-                  <span className={`badge ${s.status === "active" ? "badge-green" : "badge-neutral"}`}>
-                    {s.status || "active"}
-                  </span>
-                </td>
-                <td>
-                  <div style={{ display:"flex", gap:6 }}>
-                    <button className="btn btn-sm" onClick={() => editStaff(s)}>Edit</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => deleteStaff(s._id)}>Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            ) : staff.map(s => {
+              const isDeleting = deletingId === s._id;
+              return (
+                <tr key={s._id} style={{ opacity: isDeleting ? 0.4 : 1, transition: "opacity 0.2s" }}>
+                  <td style={{ fontWeight: 500 }}>{s.name}</td>
+                  <td style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: "var(--text-2)" }}>{s.phone}</td>
+                  <td><span className="badge badge-neutral">{s.role || "—"}</span></td>
+                  <td style={{ fontWeight: 600, fontFamily: "'DM Mono',monospace", fontSize: 13 }}>
+                    ₹{Number(s.monthlySalary || 0).toLocaleString("en-IN")}
+                  </td>
+                  <td style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: "var(--amber)" }}>
+                    ₹{Number(s.advanceBalance || 0).toLocaleString("en-IN")}
+                  </td>
+                  <td>
+                    <span className={`badge ${s.status === "active" ? "badge-green" : "badge-neutral"}`}>
+                      {s.status || "active"}
+                    </span>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => editStaff(s)}
+                        disabled={isDeleting}
+                      >
+                        Edit
+                      </button>
+                      {/* ✅ FIX: optimistic delete with visual feedback */}
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => deleteStaff(s._id, s.name)}
+                        disabled={isDeleting}
+                        style={{ minWidth: 52 }}
+                      >
+                        {isDeleting ? "…" : "Delete"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

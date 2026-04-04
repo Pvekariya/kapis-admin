@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
 import * as XLSX from "xlsx";
 
@@ -8,13 +8,15 @@ export default function InventoryPage() {
   const pathname = usePathname();
   const inventoryType = pathname.includes("/raw") ? "raw" : "finished";
 
-  const [items, setItems]         = useState<any[]>([]);
-  const [selected, setSelected]   = useState<string[]>([]);
-  const [editing, setEditing]     = useState<any | null>(null);
+  const [items, setItems]           = useState<any[]>([]);
+  const [selected, setSelected]     = useState<string[]>([]);
+  const [editing, setEditing]       = useState<any | null>(null);
   const [purchasing, setPurchasing] = useState<any | null>(null);
   const [purchaseQty, setPurchaseQty] = useState(1);
-  const [loading, setLoading]     = useState(true);
-  const [form, setForm]           = useState({
+  const [loading, setLoading]       = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [form, setForm] = useState({
     name: "", stock: "", price: "", hsn: "", color: "", packing: "",
   });
 
@@ -51,14 +53,23 @@ export default function InventoryPage() {
     load();
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Delete this item?")) return;
-    await fetch("/api/inventory", {
-      method: "DELETE", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+  // ✅ FIX: use startTransition so confirm() + fetch don't block INP
+  const remove = (id: string) => {
+    startTransition(async () => {
+      const yes = window.confirm("Delete this item?");
+      if (!yes) return;
+      setDeletingId(id);
+      try {
+        await fetch("/api/inventory", {
+          method: "DELETE", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        await load();
+      } finally {
+        setDeletingId(null);
+      }
     });
-    load();
   };
 
   const exportExcel = () => {
@@ -99,22 +110,17 @@ export default function InventoryPage() {
 
       {/* ── Stat cards ───────────────────────────────────────── */}
       <div className="grid-2" style={{ marginBottom: 20 }}>
-
         <div className="stat-card sc-blue">
-          <div className="sc-border" />
-          <div className="sc-glow" />
+          <div className="sc-border" /><div className="sc-glow" />
           <p className="sc-label">Total Inventory Value</p>
           <p className="sc-value">₹{Math.round(totalValue).toLocaleString("en-IN")}</p>
         </div>
-
         <div className="stat-card sc-red">
-          <div className="sc-border" />
-          <div className="sc-glow" />
+          <div className="sc-border" /><div className="sc-glow" />
           <p className="sc-label">Low Stock Items (&lt; 5)</p>
           <p className="sc-value">{lowCount}</p>
           {lowCount === 0 && <p className="sc-sub">All stock levels healthy</p>}
         </div>
-
       </div>
 
       {/* ── Add product form ─────────────────────────────────── */}
@@ -123,15 +129,13 @@ export default function InventoryPage() {
         <div style={{
           display: "grid",
           gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr auto",
-          gap: 10,
-          alignItems: "end",
+          gap: 10, alignItems: "end",
         }}>
           {FIELDS.map(([placeholder, key]) => (
             <div className="field" key={key}>
               <label className="field-label">{placeholder}</label>
               <input
-                className="input"
-                placeholder={placeholder}
+                className="input" placeholder={placeholder}
                 value={(form as any)[key]}
                 onChange={e => setForm({ ...form, [key]: e.target.value })}
                 type={key === "stock" || key === "price" ? "number" : "text"}
@@ -152,62 +156,43 @@ export default function InventoryPage() {
             <tr>
               <th style={{ width: 44 }}>
                 <input
-                  type="checkbox"
-                  checked={allChecked}
-                  onChange={e =>
-                    setSelected(e.target.checked ? filtered.map(i => i._id) : [])
-                  }
+                  type="checkbox" checked={allChecked}
+                  onChange={e => setSelected(e.target.checked ? filtered.map(i => i._id) : [])}
                   style={{ accentColor: "var(--accent)", cursor: "pointer" }}
                 />
               </th>
-              <th>Name</th>
-              <th>Stock</th>
-              <th>HSN</th>
-              <th>Color</th>
-              <th>Packing</th>
-              <th>Price</th>
-              <th>Actions</th>
+              <th>Name</th><th>Stock</th><th>HSN</th>
+              <th>Color</th><th>Packing</th><th>Price</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={8}>
-                  <div style={{ display: "flex", justifyContent: "center", padding: "32px 0" }}>
-                    <div className="spinner" />
-                  </div>
-                </td>
-              </tr>
+              <tr><td colSpan={8}>
+                <div style={{ display: "flex", justifyContent: "center", padding: "32px 0" }}>
+                  <div className="spinner" />
+                </div>
+              </td></tr>
             ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: "32px 0", color: "var(--text-3)" }}>
-                  No products yet — add one above
-                </td>
-              </tr>
+              <tr><td colSpan={8} style={{ textAlign: "center", padding: "32px 0", color: "var(--text-3)" }}>
+                No products yet — add one above
+              </td></tr>
             ) : filtered.map(i => {
               const isLow = Number(i.stock) < 5;
+              const isDeleting = deletingId === i._id;
               return (
-                <tr
-                  key={i._id}
-                  style={isLow ? { background: "var(--red-dim)" } : {}}
-                >
+                <tr key={i._id} style={isLow ? { background: "var(--red-dim)" } : {}}>
                   <td>
                     <input
-                      type="checkbox"
-                      checked={selected.includes(i._id)}
-                      onChange={e =>
-                        setSelected(prev =>
-                          e.target.checked ? [...prev, i._id] : prev.filter(x => x !== i._id)
-                        )
-                      }
+                      type="checkbox" checked={selected.includes(i._id)}
+                      onChange={e => setSelected(prev =>
+                        e.target.checked ? [...prev, i._id] : prev.filter(x => x !== i._id)
+                      )}
                       style={{ accentColor: "var(--accent)", cursor: "pointer" }}
                     />
                   </td>
                   <td style={{ fontWeight: 500 }}>{i.name}</td>
                   <td>
-                    <span className={isLow ? "badge badge-red" : "badge badge-green"}>
-                      {i.stock}
-                    </span>
+                    <span className={isLow ? "badge badge-red" : "badge badge-green"}>{i.stock}</span>
                   </td>
                   <td style={{ color: "var(--text-2)", fontSize: 12 }}>{i.hsn || "—"}</td>
                   <td>{i.color || "—"}</td>
@@ -223,17 +208,17 @@ export default function InventoryPage() {
                       >
                         +Stock
                       </button>
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => setEditing({ ...i })}
-                      >
+                      <button className="btn btn-sm" onClick={() => setEditing({ ...i })}>
                         Edit
                       </button>
+                      {/* ✅ FIX: onClick uses startTransition internally via remove() */}
                       <button
                         className="btn btn-danger btn-sm"
                         onClick={() => remove(i._id)}
+                        disabled={isDeleting}
+                        style={{ opacity: isDeleting ? 0.5 : 1, minWidth: 40 }}
                       >
-                        Del
+                        {isDeleting ? "…" : "Del"}
                       </button>
                     </div>
                   </td>
@@ -257,8 +242,7 @@ export default function InventoryPage() {
                 <div className="field" key={key}>
                   <label className="field-label">{placeholder}</label>
                   <input
-                    className="input"
-                    placeholder={placeholder}
+                    className="input" placeholder={placeholder}
                     value={editing[key] ?? ""}
                     type={key === "stock" || key === "price" ? "number" : "text"}
                     onChange={e => setEditing({ ...editing, [key]: e.target.value })}
@@ -267,11 +251,8 @@ export default function InventoryPage() {
               ))}
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                onClick={async () => { await update(editing._id, editing); setEditing(null); }}
-              >
+              <button className="btn btn-primary" style={{ flex: 1 }}
+                onClick={async () => { await update(editing._id, editing); setEditing(null); }}>
                 Save changes
               </button>
               <button className="btn" style={{ flex: 1 }} onClick={() => setEditing(null)}>
@@ -305,17 +286,14 @@ export default function InventoryPage() {
               />
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <button
-                className="btn btn-success"
-                style={{ flex: 1 }}
+              <button className="btn btn-success" style={{ flex: 1 }}
                 onClick={async () => {
                   await update(purchasing._id, {
                     ...purchasing,
                     stock: Number(purchasing.stock) + purchaseQty,
                   });
                   setPurchasing(null);
-                }}
-              >
+                }}>
                 Add {purchaseQty} units
               </button>
               <button className="btn" style={{ flex: 1 }} onClick={() => setPurchasing(null)}>
