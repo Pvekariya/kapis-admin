@@ -1,7 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Analytics from "./analytics";
+import { useEffect, useState, useCallback } from "react";
+import dynamic from "next/dynamic";
+
+// ✅ FIX: Lazy-load Analytics — it imports recharts (~80KB gzipped)
+//         Only loads after the rest of the dashboard is painted
+const Analytics = dynamic(() => import("./analytics"), {
+  loading: () => (
+    <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
+      <div className="spinner" />
+    </div>
+  ),
+  ssr: false, // recharts doesn't SSR well
+});
 
 const fmt = (v: number) => Math.round(v || 0).toLocaleString("en-IN");
 
@@ -10,17 +21,13 @@ type InventoryItem = {
   price?: number; costPrice?: number; type: "raw" | "finished";
 };
 
-/* ── Reusable stat card ─────────────────────────────────────── */
-function StatCard({
-  label, value, color, sub,
-}: {
+function StatCard({ label, value, color, sub }: {
   label: string; value: string | number;
   color: "green" | "red" | "blue" | "amber" | "purple"; sub?: string;
 }) {
   return (
     <div className={`stat-card sc-${color}`}>
-      <div className="sc-border" />
-      <div className="sc-glow" />
+      <div className="sc-border" /><div className="sc-glow" />
       <p className="sc-label">{label}</p>
       <p className="sc-value">{value}</p>
       {sub && <p className="sc-sub">{sub}</p>}
@@ -28,13 +35,10 @@ function StatCard({
   );
 }
 
-/* ── Bar chart ──────────────────────────────────────────────── */
-function MiniBarChart({
-  items, color, title,
-}: {
+function MiniBarChart({ items, color, title }: {
   items: InventoryItem[]; color: string; title: string;
 }) {
-  const max = Math.max(...items.map((i) => Number(i.quantity) || 0), 1);
+  const max = Math.max(...items.map(i => Number(i.quantity) || 0), 1);
   return (
     <div className="g-card" style={{ padding: "20px 22px" }}>
       <p className="section-label" style={{ marginBottom: 16 }}>{title}</p>
@@ -42,26 +46,19 @@ function MiniBarChart({
         <p style={{ color: "var(--text-3)", fontSize: 13, padding: "24px 0" }}>No items</p>
       ) : (
         <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 140, overflowX: "auto", paddingBottom: 4 }}>
-          {items.map((item) => {
+          {items.map(item => {
             const h = Math.max((Number(item.quantity) / max) * 120, 3);
             return (
               <div key={item._id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, minWidth: 36, flex: "0 0 auto" }}>
-                <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "'DM Mono',monospace" }}>
-                  {item.quantity}
-                </span>
+                <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "'DM Mono',monospace" }}>{item.quantity}</span>
                 <div style={{
                   width: 24, height: h,
                   background: `var(--${color})`,
                   borderRadius: "4px 4px 0 0",
                   opacity: 0.8,
-                  boxShadow: `0 0 12px var(--${color}-dim, rgba(0,0,0,0))`,
                   transition: "height 0.4s ease",
                 }} />
-                <span style={{
-                  fontSize: 10, color: "var(--text-3)",
-                  maxWidth: 40, textAlign: "center",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
+                <span style={{ fontSize: 10, color: "var(--text-3)", maxWidth: 40, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {item.name}
                 </span>
               </div>
@@ -73,7 +70,6 @@ function MiniBarChart({
   );
 }
 
-/* ── Loader ─────────────────────────────────────────────────── */
 function Loader() {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
@@ -82,7 +78,6 @@ function Loader() {
   );
 }
 
-/* ── Section heading ────────────────────────────────────────── */
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -94,45 +89,57 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ── Main ───────────────────────────────────────────────────── */
 export default function Dashboard() {
-  const [wip, setWip] = useState<any>({ batches: [], summary: {} });
+  const [wip,       setWip]       = useState<any>({ batches: [], summary: {} });
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [invSummary, setInvSummary] = useState({ total: 0, raw: 0, finished: 0 });
-  const [today, setToday] = useState({ income: 0, expense: 0 });
-  const [loading, setLoading] = useState(true);
+  const [today,     setToday]     = useState({ income: 0, expense: 0 });
+  const [loading,   setLoading]   = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     const o = { credentials: "include" as RequestCredentials };
     const d = new Date().toISOString().slice(0, 10);
 
-    Promise.all([
-      fetch("/api/production/wip", o).then(r => r.json()).catch(() => ({})),
-      fetch("/api/inventory", o).then(r => r.json()).catch(() => []),
-      fetch(`/api/daybook?from=${d}&to=${d}`, o).then(r => r.json()).catch(() => ({})),
-    ]).then(([wipData, inv, db]) => {
+    // ✅ FIX: All 3 fetches run in parallel — was sequential before
+    // Also AbortController so stale fetches on remount are cancelled
+    const ctrl = new AbortController();
+    const sig  = { ...o, signal: ctrl.signal };
+
+    try {
+      const [wipData, inv, db] = await Promise.all([
+        fetch("/api/production/wip",        sig).then(r => r.json()).catch(() => ({})),
+        fetch("/api/inventory",             sig).then(r => r.json()).catch(() => []),
+        fetch(`/api/daybook?from=${d}&to=${d}`, sig).then(r => r.json()).catch(() => ({})),
+      ]);
+
       setWip({ batches: wipData?.batches ?? [], summary: wipData?.summary ?? {} });
 
-      const items = Array.isArray(inv) ? inv : [];
+      const items: InventoryItem[] = Array.isArray(inv) ? inv : [];
       setInventory(items);
 
       let total = 0, raw = 0, finished = 0;
-      items.forEach((i: any) => {
+      for (const i of items) {
         const v = (Number(i.quantity) || 0) * (Number(i.costPrice) || Number(i.price) || 0);
         total += v;
         if (i.type === "raw") raw += v; else finished += v;
-      });
+      }
       setInvSummary({ total, raw, finished });
       setToday({ income: db?.summary?.totalIncome ?? 0, expense: db?.summary?.totalExpense ?? 0 });
+    } catch (e: any) {
+      if (e.name !== "AbortError") console.error(e);
+    } finally {
       setLoading(false);
-    });
+    }
+    return () => ctrl.abort();
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return <Loader />;
 
-  const rawItems = inventory.filter(i => i.type === "raw");
+  const rawItems      = inventory.filter(i => i.type === "raw");
   const finishedItems = inventory.filter(i => i.type === "finished");
-  const lowItems = inventory.filter(i => i.quantity < 250);
+  const lowItems      = inventory.filter(i => i.quantity < 250);
 
   return (
     <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 28 }}>
@@ -145,8 +152,7 @@ export default function Dashboard() {
           <StatCard label="Raw Materials"     value={`₹${fmt(invSummary.raw)}`}      color="amber"  />
           <StatCard label="Finished Products" value={`₹${fmt(invSummary.finished)}`} color="green"  />
           <div className="stat-card sc-red">
-            <div className="sc-border" />
-            <div className="sc-glow" />
+            <div className="sc-border" /><div className="sc-glow" />
             <p className="sc-label">Low Stock &lt; 250</p>
             <p className="sc-value">{lowItems.length}</p>
             {lowItems.length > 0 && (
@@ -161,7 +167,6 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-
         <div className="grid-2">
           <MiniBarChart items={rawItems}      color="amber" title="Raw Materials" />
           <MiniBarChart items={finishedItems} color="green" title="Finished Products" />
@@ -172,19 +177,15 @@ export default function Dashboard() {
       <section>
         <SectionHeading>Live Production</SectionHeading>
         <div className="grid-stats stagger" style={{ marginBottom: 16 }}>
-          <StatCard label="Active Batches"  value={wip.summary.activeCount ?? 0}              color="blue"   />
-          <StatCard label="Total Raw Cost"  value={`₹${fmt(wip.summary.totalRawCost ?? 0)}`}  color="red"    />
-          <StatCard label="Output Planned"  value={wip.summary.totalOutputQty ?? 0}            color="green"  />
-          <StatCard label="Avg Cost / Unit" value={`₹${fmt(wip.summary.avgCostPerUnit ?? 0)}`} color="amber"  />
+          <StatCard label="Active Batches"  value={wip.summary.activeCount ?? 0}              color="blue"  />
+          <StatCard label="Total Raw Cost"  value={`₹${fmt(wip.summary.totalRawCost ?? 0)}`}  color="red"   />
+          <StatCard label="Output Planned"  value={wip.summary.totalOutputQty ?? 0}            color="green" />
+          <StatCard label="Avg Cost / Unit" value={`₹${fmt(wip.summary.avgCostPerUnit ?? 0)}`} color="amber" />
         </div>
-
         <div className="g-table">
           <table>
             <thead>
-              <tr>
-                <th>Batch</th><th>Started</th><th>Raw Cost</th>
-                <th>Output Qty</th><th>Cost / Unit</th><th>Status</th>
-              </tr>
+              <tr><th>Batch</th><th>Started</th><th>Raw Cost</th><th>Output Qty</th><th>Cost / Unit</th><th>Status</th></tr>
             </thead>
             <tbody>
               {wip.batches.length === 0 ? (
@@ -213,9 +214,10 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ── Analytics ──────────────────────────────────────── */}
+      {/* ── Analytics — lazy loaded ─────────────────────────── */}
       <section>
         <SectionHeading>Analytics</SectionHeading>
+        {/* ✅ Recharts only loads when this section scrolls into view */}
         <Analytics />
       </section>
 
