@@ -77,11 +77,12 @@ export async function GET(req: Request) {
         0
       );
 
-      const remaining = earned - totalAdvance;
-
       const lockRecord = salaryLocks.find(
         (l: any) => String(l.staffId) === String(s._id)
       );
+
+      const grossRemaining = earned - totalAdvance;
+      const remaining = lockRecord?.isPaid ? 0 : grossRemaining;
 
       return {
         staffId: s._id.toString(),
@@ -90,9 +91,11 @@ export async function GET(req: Request) {
         workedUnits,
         earned,
         totalAdvance,
+        grossRemaining,
         remaining,
         isLocked: lockRecord?.isLocked || false,
         isPaid: lockRecord?.isPaid || false,
+        paidAmount: Number(lockRecord?.paidAmount || 0),
       };
     });
 

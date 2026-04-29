@@ -187,8 +187,12 @@ export default function AttendancePage() {
                         if (disabled || isFutureMonth || isLocked) return;
                         const rect = (e.target as HTMLElement).getBoundingClientRect();
                         const estimatedPopupHeight = 220;
-                        const headerClearance = 80;
-                        const openAbove = rect.top > estimatedPopupHeight + headerClearance;
+                        const stickyHeaderHeight = 72;
+                        const spaceAbove = rect.top - stickyHeaderHeight;
+                        const spaceBelow = window.innerHeight - rect.bottom - 16;
+                        const openAbove =
+                          spaceAbove >= estimatedPopupHeight &&
+                          spaceAbove >= spaceBelow;
                         setPopupPos({
                           x: rect.left + rect.width / 2,
                           top: rect.top,
