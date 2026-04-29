@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { guardAuth } from "@/lib/auth";
 
 /* =========================
    GET SALARY SUMMARY
 ========================= */
 export async function GET(req: Request) {
   try {
+    const unauth = await guardAuth();
+    if (unauth) return unauth;
+
     const db = await getDb();
     const { searchParams } = new URL(req.url);
 
@@ -104,6 +108,9 @@ export async function GET(req: Request) {
 ========================= */
 export async function PUT(req: Request) {
   try {
+    const unauth = await guardAuth();
+    if (unauth) return unauth;
+
     const db = await getDb();
     const body = await req.json();
 
@@ -149,6 +156,9 @@ export async function PUT(req: Request) {
 ========================= */
 export async function POST(req: Request) {
   try {
+    const unauth = await guardAuth();
+    if (unauth) return unauth;
+
     const db = await getDb();
     const body = await req.json();
 

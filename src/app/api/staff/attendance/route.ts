@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { guardAuth } from "@/lib/auth";
 import { loadIndiaHolidays } from "@/lib/holidayLoader";
 
 /* =========================
@@ -8,6 +9,9 @@ import { loadIndiaHolidays } from "@/lib/holidayLoader";
 ========================= */
 export async function GET(req: Request) {
   try {
+    const unauth = await guardAuth();
+    if (unauth) return unauth;
+
     const db = await getDb();
     const { searchParams } = new URL(req.url);
 
@@ -80,6 +84,9 @@ export async function GET(req: Request) {
 ========================= */
 export async function POST(req: Request) {
   try {
+    const unauth = await guardAuth();
+    if (unauth) return unauth;
+
     const db = await getDb();
     const body = await req.json();
 

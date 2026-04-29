@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { guardAuth } from "@/lib/auth";
 
 /* =========================
    GET ADVANCES (MONTH FILTER)
 ========================= */
 export async function GET(req: Request) {
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
+
   const db = await getDb();
   const { searchParams } = new URL(req.url);
 
@@ -33,6 +37,9 @@ export async function GET(req: Request) {
    ADD ADVANCE
 ========================= */
 export async function POST(req: Request) {
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
+
   const db = await getDb();
   const body = await req.json();
 
@@ -81,6 +88,9 @@ export async function POST(req: Request) {
    DELETE ADVANCE
 ========================= */
 export async function DELETE(req: Request) {
+  const unauth = await guardAuth();
+  if (unauth) return unauth;
+
   const db = await getDb();
   const { id } = await req.json();
 
