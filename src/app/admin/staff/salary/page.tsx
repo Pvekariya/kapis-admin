@@ -78,7 +78,10 @@ export default function SalaryPage() {
 
   const totalEarned    = data.reduce((s,d) => s + (d.earned||0), 0);
   const totalAdvance   = data.reduce((s,d) => s + (d.totalAdvance||0), 0);
-  const totalRemaining = data.reduce((s,d) => s + (d.remaining||0), 0);
+  const totalRemaining = data.reduce((sum, d) => {
+    const remaining = d.isPaid ? 0 : Number(d.remaining || 0);
+    return sum + remaining;
+  }, 0);
 
   return (
     <div className="fade-in">
@@ -121,7 +124,10 @@ export default function SalaryPage() {
         <div style={{ display:"flex", justifyContent:"center", padding:"48px 0" }}>
           <div className="spinner" />
         </div>
-      ) : data.map(s => (
+      ) : data.map(s => {
+        const visibleRemaining = s.isPaid ? 0 : Number(s.remaining || 0);
+
+        return (
         <div key={s.staffId} className="g-card" style={{ padding:"20px 22px", marginBottom:12 }}>
 
           {/* Top row */}
@@ -140,9 +146,14 @@ export default function SalaryPage() {
               <p style={{ fontSize:12 }}>
                 Advance: <span style={{ color:"var(--amber)", fontWeight:600, fontFamily:"'DM Mono',monospace" }}>₹{fmt(s.totalAdvance)}</span>
               </p>
+              {s.isPaid && (
+                <p style={{ fontSize:12 }}>
+                  Paid: <span style={{ color:"var(--green)", fontWeight:600, fontFamily:"'DM Mono',monospace" }}>₹{fmt(s.paidAmount || s.grossRemaining || s.earned)}</span>
+                </p>
+              )}
               <p style={{ fontSize:13, fontWeight:700 }}>
-                Remaining: <span style={{ color: s.remaining < 0 ? "var(--red)" : "var(--blue)", fontFamily:"'DM Mono',monospace" }}>
-                  ₹{fmt(s.remaining)}
+                Remaining: <span style={{ color: visibleRemaining < 0 ? "var(--red)" : "var(--blue)", fontFamily:"'DM Mono',monospace" }}>
+                  ₹{fmt(visibleRemaining)}
                 </span>
               </p>
             </div>
@@ -213,7 +224,7 @@ export default function SalaryPage() {
           </div>
 
         </div>
-      ))}
+      )})}
 
     </div>
   );

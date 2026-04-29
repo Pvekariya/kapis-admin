@@ -47,6 +47,29 @@ export async function GET(req: Request) {
       .find({ month, year })
       .toArray();
 
+    const salaryLockMap = new Map<string, any>();
+
+    salaryLocks.forEach((lock: any) => {
+      const staffKey = String(lock.staffId);
+      const existing = salaryLockMap.get(staffKey);
+
+      if (!existing) {
+        salaryLockMap.set(staffKey, lock);
+        return;
+      }
+
+      const existingRank = existing.isPaid ? 2 : existing.isLocked ? 1 : 0;
+      const nextRank = lock.isPaid ? 2 : lock.isLocked ? 1 : 0;
+      const existingTime = new Date(
+        existing.paidDate || existing.updatedAt || 0
+      ).getTime();
+      const nextTime = new Date(lock.paidDate || lock.updatedAt || 0).getTime();
+
+      if (nextRank > existingRank || (nextRank === existingRank && nextTime >= existingTime)) {
+        salaryLockMap.set(staffKey, lock);
+      }
+    });
+
     const totalDaysInMonth = new Date(year, month, 0).getDate();
 
     const result = staff.map((s: any) => {
@@ -77,9 +100,7 @@ export async function GET(req: Request) {
         0
       );
 
-      const lockRecord = salaryLocks.find(
-        (l: any) => String(l.staffId) === String(s._id)
-      );
+      const lockRecord = salaryLockMap.get(String(s._id));
 
       const grossRemaining = earned - totalAdvance;
       const remaining = lockRecord?.isPaid ? 0 : grossRemaining;
