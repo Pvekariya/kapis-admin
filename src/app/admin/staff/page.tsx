@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import {
+  FIELD_LIMITS,
+  sanitizePhone,
+  validateOptionalText,
+  validatePhone,
+  validateRequiredText,
+} from "@/lib/entityValidation";
 
 export default function StaffPage() {
   const [staff, setStaff]         = useState<any[]>([]);
@@ -10,6 +17,7 @@ export default function StaffPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState({ name: "", phone: "", role: "", monthlySalary: "" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const load = async () => {
     const res  = await fetch("/api/staff", { credentials: "include" });
@@ -20,25 +28,54 @@ export default function StaffPage() {
 
   useEffect(() => { load(); }, []);
 
+  const validateForm = () => {
+    const nextErrors: Record<string, string> = {};
+
+    nextErrors.name = validateRequiredText(form.name, "Name", FIELD_LIMITS.personName);
+    nextErrors.phone = validatePhone(form.phone, false);
+    nextErrors.role = validateOptionalText(form.role, "Role", FIELD_LIMITS.role);
+    if (!form.monthlySalary.trim()) {
+      nextErrors.monthlySalary = "Monthly salary is required";
+    } else if (Number.isNaN(Number(form.monthlySalary)) || Number(form.monthlySalary) < 0) {
+      nextErrors.monthlySalary = "Monthly salary must be 0 or more";
+    }
+
+    return Object.fromEntries(Object.entries(nextErrors).filter(([, value]) => value));
+  };
+
   const handleSubmit = async () => {
-    if (!form.name.trim()) return;
+    const nextErrors = validateForm();
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
     setSaving(true);
     try {
       if (editingId) {
-        await fetch("/api/staff", {
+        const res = await fetch("/api/staff", {
           method: "PUT", credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...form, id: editingId, monthlySalary: Number(form.monthlySalary) }),
         });
+        const data = await res.json();
+        if (!res.ok) {
+          setErrors({ form: data.error || "Failed to update staff" });
+          return;
+        }
         setEditingId(null);
       } else {
-        await fetch("/api/staff", {
+        const res = await fetch("/api/staff", {
           method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...form, monthlySalary: Number(form.monthlySalary) }),
         });
+        const data = await res.json();
+        if (!res.ok) {
+          setErrors({ form: data.error || "Failed to add staff" });
+          return;
+        }
       }
       setForm({ name: "", phone: "", role: "", monthlySalary: "" });
+      setErrors({});
       await load();
     } finally { setSaving(false); }
   };
@@ -77,11 +114,13 @@ export default function StaffPage() {
   const editStaff = (s: any) => {
     setForm({ name: s.name, phone: s.phone, role: s.role, monthlySalary: s.monthlySalary });
     setEditingId(s._id);
+    setErrors({});
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setForm({ name: "", phone: "", role: "", monthlySalary: "" });
+    setErrors({});
   };
 
   const FIELDS: [string, string, string][] = [
@@ -103,13 +142,21 @@ export default function StaffPage() {
       {/* Form */}
       <div className="g-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
         <p className="section-label">{editingId ? "Edit Staff Member" : "Add Staff Member"}</p>
+        {errors.form && (
+          <div style={{ marginBottom: 12, color: "#f87171", fontSize: 12 }}>{errors.form}</div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr) auto", gap: 12, alignItems: "end" }}>
           {FIELDS.map(([label, key, type]) => (
             <div className="field" key={key}>
               <label className="field-label">{label}</label>
-              <input className="input" type={type} placeholder={label}
+              <input className="input" type={type} placeholder={key === "phone" ? "+91 9876543210" : label}
+                maxLength={key === "name" ? FIELD_LIMITS.personName : key === "phone" ? FIELD_LIMITS.phone : key === "role" ? FIELD_LIMITS.role : undefined}
+                style={errors[key] ? { borderColor: "#ef4444" } : undefined}
                 value={(form as any)[key]}
-                onChange={e => setForm({ ...form, [key]: e.target.value })} />
+                onChange={e => setForm({ ...form, [key]: key === "phone" ? sanitizePhone(e.target.value) : e.target.value })} />
+              {errors[key] && (
+                <p style={{ marginTop: 4, fontSize: 11, color: "#f87171" }}>{errors[key]}</p>
+              )}
             </div>
           ))}
           <div style={{ display: "flex", gap: 8, alignSelf: "flex-end" }}>

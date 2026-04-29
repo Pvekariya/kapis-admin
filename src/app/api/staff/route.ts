@@ -2,14 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { guardAuth } from "@/lib/auth";
 import { ObjectId } from "mongodb";
-import { z } from "zod";
-
-const StaffSchema = z.object({
-  name: z.string().min(1).max(100),
-  phone: z.string().max(20).optional().default(""),
-  role: z.string().max(100).optional().default(""),
-  monthlySalary: z.number().min(0),
-});
+import { StaffSchema } from "@/lib/entitySchema";
 
 export async function GET() {
   const unauth = await guardAuth();
@@ -35,7 +28,7 @@ export async function POST(req: Request) {
     monthlySalary: Number(body.monthlySalary ?? 0),
   });
   if (!parsed.success)
-    return NextResponse.json({ error: "Invalid data" }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
   const db = await getDb();
   await db.collection("staff").insertOne({
@@ -62,7 +55,7 @@ export async function PUT(req: Request) {
     monthlySalary: Number(body.monthlySalary ?? 0),
   });
   if (!parsed.success)
-    return NextResponse.json({ error: "Invalid data" }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
   const db = await getDb();
   await db.collection("staff").updateOne(

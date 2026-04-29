@@ -2,21 +2,14 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/auth";
 import { ObjectId } from "mongodb";
-import { z } from "zod";
-
-const UpdateSchema = z.object({
-  name: z.string().max(100).optional(),
-  email: z.string().email().max(200).optional(),
-  // avatar is a URL string or base64 — keep max size reasonable
-  avatar: z.string().max(500_000).optional(),
-});
+import { ProfileUpdateSchema } from "@/lib/entitySchema";
 
 export async function POST(req: Request) {
   try {
     const payload = await requireAuth();
 
     const body = await req.json();
-    const parsed = UpdateSchema.safeParse(body);
+    const parsed = ProfileUpdateSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(

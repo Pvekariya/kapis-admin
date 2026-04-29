@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import {
+  FIELD_LIMITS,
+  sanitizeEmail,
+  validateEmail,
+  validateOptionalText,
+} from "@/lib/entityValidation";
 
 /* ── Icons ──────────────────────────────────────────── */
 const SunIcon = () => (
@@ -69,6 +75,7 @@ export default function Header() {
   const [showEditModal,  setShowEditModal] = useState(false);
   const [user,           setUser]          = useState({ email:"", name:"", avatar:"" });
   const [editForm,       setEditForm]      = useState({ email:"", name:"", avatar:"" });
+  const [editErrors,     setEditErrors]    = useState<Record<string, string>>({});
   const [notifications,  setNotifications] = useState<any[]>([]);
   const [saving,         setSaving]        = useState(false);
 
@@ -83,6 +90,13 @@ export default function Header() {
     document.documentElement.classList.add(t);
     setMounted(true);
   }, []);
+
+  const validateProfileForm = () => {
+    const errors: Record<string, string> = {};
+    errors.name = validateOptionalText(editForm.name, "Name", FIELD_LIMITS.personName);
+    errors.email = validateEmail(editForm.email, true);
+    return Object.fromEntries(Object.entries(errors).filter(([, value]) => value));
+  };
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -340,11 +354,19 @@ export default function Header() {
             </div>
 
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {editErrors.form && (
+                <p style={{ margin:0, fontSize:12, color:"#f87171" }}>{editErrors.form}</p>
+              )}
               {[["Name","name","text"],["Email","email","email"]].map(([lbl,key,type])=>(
                 <div className="field" key={key}>
                   <label className="field-label">{lbl}</label>
                   <input className="input" type={type} value={(editForm as any)[key]}
-                    onChange={e=>setEditForm(f=>({...f,[key]:e.target.value}))}/>
+                    maxLength={key === "name" ? FIELD_LIMITS.personName : FIELD_LIMITS.email}
+                    style={editErrors[key] ? { borderColor:"#ef4444" } : undefined}
+                    onChange={e=>setEditForm(f=>({...f,[key]:key==="email"?sanitizeEmail(e.target.value):e.target.value}))}/>
+                  {editErrors[key] && (
+                    <p style={{ marginTop:4, fontSize:11, color:"#f87171" }}>{editErrors[key]}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -352,11 +374,16 @@ export default function Header() {
             <div style={{ display:"flex", gap:10, marginTop:20 }}>
               <button className="btn btn-primary" style={{ flex:1 }} disabled={saving}
                 onClick={async()=>{
+                  const errors = validateProfileForm();
+                  setEditErrors(errors);
+                  if (Object.keys(errors).length) return;
+
                   setSaving(true);
                   try {
                     const res = await fetch("/api/auth/update",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(editForm)});
                     const d   = await res.json();
-                    if(d.success){ setUser(editForm); setShowEditModal(false); }
+                    if(d.success){ setUser(editForm); setShowEditModal(false); setEditErrors({}); }
+                    else if (d.error) { setEditErrors({ form: d.error }); }
                   } finally { setSaving(false); }
                 }}>
                 {saving?"Saving…":"Save changes"}
