@@ -7,7 +7,7 @@ import { CreateTenantSchema, UpdateTenantSchema } from "@/lib/entitySchema";
 
 async function ensureSuperAdmin() {
   try {
-    const payload = await requireAuth();
+    const payload = (await requireAuth()) as { role?: string };
     if (payload.role !== "superadmin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
