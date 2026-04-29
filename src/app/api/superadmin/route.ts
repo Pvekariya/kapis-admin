@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { guardSuperAdmin } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { CreateTenantSchema, UpdateTenantSchema } from "@/lib/entitySchema";
 
+async function ensureSuperAdmin() {
+  try {
+    const payload = await requireAuth();
+    if (payload.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    return null;
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+}
+
 /* GET — list all tenants */
 export async function GET() {
-  const unauth = await guardSuperAdmin();
+  const unauth = await ensureSuperAdmin();
   if (unauth) return unauth;
 
   const db      = await getDb();
@@ -28,7 +40,7 @@ export async function GET() {
 
 /* POST — create new tenant */
 export async function POST(req: Request) {
-  const unauth = await guardSuperAdmin();
+  const unauth = await ensureSuperAdmin();
   if (unauth) return unauth;
 
   const body   = await req.json();
@@ -74,7 +86,7 @@ export async function POST(req: Request) {
 
 /* PATCH — update tenant settings */
 export async function PATCH(req: Request) {
-  const unauth = await guardSuperAdmin();
+  const unauth = await ensureSuperAdmin();
   if (unauth) return unauth;
 
   const body = await req.json();
@@ -96,7 +108,7 @@ export async function PATCH(req: Request) {
 
 /* DELETE — deactivate tenant */
 export async function DELETE(req: Request) {
-  const unauth = await guardSuperAdmin();
+  const unauth = await ensureSuperAdmin();
   if (unauth) return unauth;
 
   const { id } = await req.json();

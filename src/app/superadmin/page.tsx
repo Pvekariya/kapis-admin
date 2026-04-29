@@ -440,12 +440,22 @@ export default function SuperAdminPage() {
                   <input style={{ ...S.input, ...inputError(editErrors, `invoice${k.charAt(0).toUpperCase()}${k.slice(1)}`) }} value={editForm.invoiceHeader?.[k]||""}
                     maxLength={k === "companyName" ? FIELD_LIMITS.companyName : k === "address" ? FIELD_LIMITS.address : k === "phone" ? FIELD_LIMITS.phone : k === "email" ? FIELD_LIMITS.email : FIELD_LIMITS.gstin}
                     placeholder={k === "phone" ? "+91 9876543210" : undefined}
-                    onChange={e=>setEditForm({...editForm,invoiceHeader:{...editForm.invoiceHeader,[k]:
-                      k === "phone" ? sanitizePhone(e.target.value)
-                      : k === "email" ? sanitizeEmail(e.target.value)
-                      : k === "gstin" ? sanitizeGstin(e.target.value)
-                      : e.target.value
-                    }}})}/>
+                    onChange={e =>
+                      setEditForm({
+                        ...editForm,
+                        invoiceHeader: {
+                          ...editForm.invoiceHeader,
+                          [k]:
+                            k === "phone"
+                              ? sanitizePhone(e.target.value)
+                              : k === "email"
+                                ? sanitizeEmail(e.target.value)
+                                : k === "gstin"
+                                  ? sanitizeGstin(e.target.value)
+                                  : e.target.value,
+                        },
+                      })
+                    }/>
                   {renderError(editErrors, `invoice${k.charAt(0).toUpperCase()}${k.slice(1)}`)}
                 </div>
               ))}
