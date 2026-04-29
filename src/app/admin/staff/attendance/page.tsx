@@ -27,7 +27,7 @@ export default function AttendancePage() {
   const [holidays, setHolidays]   = useState<any[]>([]);
   const [isLocked, setIsLocked]   = useState(false);
   const [activeCell, setActiveCell] = useState<{ staffId:string; day:number }|null>(null);
-  const [popupPos, setPopupPos]   = useState<{ x:number; y:number }|null>(null);
+  const [popupPos, setPopupPos]   = useState<{ x:number; top:number; bottom:number; openAbove:boolean }|null>(null);
   const popupRef                  = useRef<HTMLDivElement>(null);
 
   const daysInMonth    = new Date(year, month, 0).getDate();
@@ -186,7 +186,15 @@ export default function AttendancePage() {
                       onClick={e => {
                         if (disabled || isFutureMonth || isLocked) return;
                         const rect = (e.target as HTMLElement).getBoundingClientRect();
-                        setPopupPos({ x: rect.left + rect.width/2, y: rect.top });
+                        const estimatedPopupHeight = 220;
+                        const headerClearance = 80;
+                        const openAbove = rect.top > estimatedPopupHeight + headerClearance;
+                        setPopupPos({
+                          x: rect.left + rect.width / 2,
+                          top: rect.top,
+                          bottom: rect.bottom,
+                          openAbove,
+                        });
                         setActiveCell({ staffId: s._id, day });
                       }}
                     >
@@ -204,9 +212,9 @@ export default function AttendancePage() {
       {activeCell && popupPos && (
         <div ref={popupRef} style={{
           position:"fixed",
-          top: popupPos.y - 8,
+          top: popupPos.openAbove ? popupPos.top - 8 : popupPos.bottom + 8,
           left: popupPos.x,
-          transform:"translate(-50%,-100%)",
+          transform: popupPos.openAbove ? "translate(-50%,-100%)" : "translateX(-50%)",
           background:"var(--glass-modal)",
           backdropFilter:"blur(24px)",
           WebkitBackdropFilter:"blur(24px)",
