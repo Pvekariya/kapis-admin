@@ -1,36 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SME ERP System
+
+A full-stack ERP dashboard built for a real SME client, replacing manual, spreadsheet-based operations with a single system for sales billing, inventory management, and financial reporting.
+
+🔗 **Live:** [kapis-admin.vercel.app](https://kapis-admin.vercel.app)
+🛠️ **Status:** Deployed and in active use by the client
+
+---
+
+## Overview
+
+[2-4 sentences: What was the client's problem before this existed? e.g. "The client previously tracked billing, stock, and daily financials manually across spreadsheets, causing delays and reconciliation errors. This system consolidates those workflows into one dashboard used daily by staff for billing, inventory checks, and financial reporting."]
+
+**Who uses it:** [e.g. "Sales staff for billing, inventory managers for stock tracking, owner/accountant for financial daybook review"]
+
+---
+
+## Key Modules
+
+### 🧾 Sales Billing
+- [Describe: How is an invoice created? Line items, tax calculation, customer records, PDF/print output?]
+- [Any validation, discount rules, or payment status tracking?]
+
+### 📦 Inventory Management
+- Real-time stock level tracking
+- [Low-stock alerts? Stock-in/stock-out logging? Batch/SKU tracking?]
+- [How does inventory update when a sale is billed — automatic deduction?]
+
+### 📊 Financial Daybook & Analytics
+- Real-time dashboards for [daily sales, revenue trends, expense tracking — specify what's actually shown]
+- [Chart library used — Recharts? Any date-range filtering?]
+
+### 🔐 Access Control
+- [If implemented: role-based access — e.g. admin vs. staff views. If not implemented, remove this section.]
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js, React.js |
+| Backend / Data | MongoDB |
+| Deployment | Vercel |
+| Styling | [Tailwind CSS / CSS Modules — confirm which] |
+
+---
+
+## Architecture
+
+[Optional but strong for a full-stack story: a short paragraph or simple diagram of how frontend talks to MongoDB — direct API routes in Next.js? Separate backend service? This is a good spot to show full-stack thinking, not just UI work.]
+
+---
+
+## Screenshots
+
+<!-- This section matters a lot for recruiters skimming — add 3-4 real screenshots -->
+<!-- ![Dashboard Overview](./screenshots/dashboard.png) -->
+<!-- ![Billing Screen](./screenshots/billing.png) -->
+<!-- ![Inventory View](./screenshots/inventory.png) -->
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18+
+- A MongoDB instance (local or Atlas)
+
+### Installation
+
+```bash
+git clone https://github.com/Pvekariya/SME_ERP.git
+cd SME_ERP
+npm install
+```
+
+### Environment Variables
+
+Create a `.env.local` file in the root:
+
+```
+MONGODB_URI=your_mongodb_connection_string
+[list any other required env vars — auth secrets, API keys, etc.]
+```
+
+### Run Locally
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Challenges & Learnings
 
-## Learn More
+[Optional but valuable — 2-3 bullets on real technical decisions, e.g. "Handling real-time inventory sync without over-fetching," "Structuring MongoDB schemas for fast daybook aggregation queries." This is what separates a tutorial project from real engineering in a recruiter's eyes.]
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Roadmap
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [ ] [Any planned features — multi-branch support, GST invoicing, export to Excel, etc.]
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Author
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Pratik Vekariya**
+Full Stack Developer
+[LinkedIn](https://www.linkedin.com/in/pratik-vekariya-95a319246) · [GitHub](https://github.com/Pvekariya) · [Portfolio](#)
